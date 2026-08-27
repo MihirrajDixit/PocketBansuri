@@ -21,27 +21,27 @@ enum class Swara(
 
     /**
      * Gets the fingering list for a given octave.
-     * Teevra Ma in High/Max octaves colors all holes H1 to H7.
      */
     fun getFingeringForOctave(octave: String): List<Float> {
-        if (this == MA && (octave.uppercase() == "HIGH" || octave.uppercase() == "MAX")) {
-            return listOf(1f, 1f, 1f, 1f, 1f, 1f, 1f) // H1 to H7 closed for Teevra Ma
-        }
         return this.baseFingering
     }
 
     /**
      * Calculates the JNI MIDI note of the Swara for a given scale key and octave.
-     * MA in High/Max octaves plays as Teevra Ma (+6 semitones instead of +5).
      */
     fun getMidiNoteForScaleAndOctave(scale: String, octave: String): Int {
         val rootMidi = when (scale.uppercase()) {
             "C" -> 60
+            "C#" -> 61
             "D" -> 62
+            "D#" -> 63
             "E" -> 64
             "F" -> 65
+            "F#" -> 66
             "G" -> 67
+            "G#" -> 68
             "A" -> 69
+            "A#" -> 70
             "B" -> 71
             else -> 60
         }
@@ -49,20 +49,14 @@ enum class Swara(
             "LOW" -> -12
             "MID" -> 0
             "HIGH" -> 12
-            "MAX" -> 24
+            "MAX", "V.HIGH" -> 24
             else -> 0
         }
         val swaraOffset = when (this) {
             SA -> 0
             RE -> 2
             GA -> 4
-            MA -> {
-                if (octave.uppercase() == "HIGH" || octave.uppercase() == "MAX") {
-                    6 // Teevra Ma (augmented 4th)
-                } else {
-                    5 // Shuddha Ma (perfect 4th)
-                }
-            }
+            MA -> 5 // Always Shuddha Ma (perfect 4th)
             PA -> 7
             DHA -> 9
             NI -> 11
@@ -77,6 +71,17 @@ enum class Swara(
     fun getFrequencyForScaleAndOctave(scale: String, octave: String): Float {
         val midi = getMidiNoteForScaleAndOctave(scale, octave)
         return (440.0 * 2.0.pow((midi - 69) / 12.0)).toFloat()
+    }
+
+    /**
+     * Calculates the Western equivalent pitch (e.g. "C4", "F#5")
+     */
+    fun getWesternEquivalent(scale: String, octave: String): String {
+        val midi = getMidiNoteForScaleAndOctave(scale, octave)
+        val noteNames = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+        val noteName = noteNames[midi % 12]
+        val octaveNum = (midi / 12) - 1
+        return "$noteName$octaveNum"
     }
 
     companion object {

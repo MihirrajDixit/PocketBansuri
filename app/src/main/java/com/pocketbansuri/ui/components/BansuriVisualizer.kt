@@ -3,10 +3,11 @@ package com.pocketbansuri.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -15,9 +16,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.nativeCanvas
 import com.pocketbansuri.model.Swara
 import com.pocketbansuri.ui.theme.*
@@ -26,6 +25,7 @@ import com.pocketbansuri.ui.theme.*
 fun BansuriVisualizer(
     activeSwara: Swara,
     selectedOctave: String = "MID",
+    isPlaying: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val targetFingering = activeSwara.getFingeringForOctave(selectedOctave)
@@ -39,6 +39,9 @@ fun BansuriVisualizer(
         ).value
     }
 
+    // Dynamic closed color: turns to white when the sound plays
+    val closedColor = if (isPlaying) Color.White else BambooGold
+
     Box(
         modifier = modifier
             .fillMaxHeight()
@@ -49,10 +52,10 @@ fun BansuriVisualizer(
             val canvasWidth = size.width
             val canvasHeight = size.height
 
-            // Calculate responsive dimensions
-            val fluteWidth = canvasWidth * 0.28f
+            // Calculate responsive dimensions (narrower and longer)
+            val fluteWidth = canvasWidth * 0.20f
             val fluteLeft = (canvasWidth - fluteWidth) / 2f
-            val fluteHeight = canvasHeight * 0.95f
+            val fluteHeight = canvasHeight * 0.98f
             val fluteTop = (canvasHeight - fluteHeight) / 2f
 
             // 1. Draw Flute Body with a rich 3D cylindrical wood gradient
@@ -84,7 +87,7 @@ fun BansuriVisualizer(
 
             // 2. Draw traditional thread bindings (prevents wood splitting)
             val threadColor = Color(0xFF6B1D1D) // Traditional dark red thread
-            val threadRatios = listOf(0.06f, 0.22f, 0.52f, 0.80f, 0.92f)
+            val threadRatios = listOf(0.04f, 0.18f, 0.52f, 0.87f, 0.96f) // Moved 0.82 to 0.87 to clear H6
             val threadHeight = fluteHeight * 0.022f
 
             threadRatios.forEach { ratio ->
@@ -110,8 +113,8 @@ fun BansuriVisualizer(
             }
 
             // 3. Draw Blow Hole (Embouchure)
-            val blowHoleY = fluteTop + fluteHeight * 0.14f
-            val blowHoleRadius = fluteWidth * 0.22f
+            val blowHoleY = fluteTop + fluteHeight * 0.10f
+            val blowHoleRadius = fluteWidth * 0.25f
             
             // Inside depth
             drawCircle(
@@ -127,12 +130,12 @@ fun BansuriVisualizer(
                 style = Stroke(width = 2.5f)
             )
 
-            // 4. Draw the 7 play holes (Equidistant and sized to prevent overlap)
-            val startY = fluteTop + fluteHeight * 0.30f
-            val endY = fluteTop + fluteHeight * 0.86f
+            // 4. Draw the 7 play holes (Increased spacing and stretched distribution)
+            val startY = fluteTop + fluteHeight * 0.24f
+            val endY = fluteTop + fluteHeight * 0.94f
             val totalHoles = 7
             val spacingY = (endY - startY) / (totalHoles - 1)
-            val holeRadius = fluteWidth * 0.13f
+            val holeRadius = fluteWidth * 0.16f
 
             for (index in 0 until totalHoles) {
                 val holeY = startY + index * spacingY
@@ -151,7 +154,7 @@ fun BansuriVisualizer(
                         // Drawing half-closed hole (e.g. for High Sa)
                         // Left side remains open (dark), right side filled (closed)
                         drawArc(
-                            color = BambooGold,
+                            color = closedColor,
                             startAngle = -90f,
                             sweepAngle = 180f,
                             useCenter = true,
@@ -168,9 +171,9 @@ fun BansuriVisualizer(
                             size = Size(holeRadius * 1.6f, holeRadius * 1.6f)
                         )
                     } else {
-                        // Fully closed hole (covers with bamboo finger representation or glowing amber)
+                        // Fully closed hole
                         drawCircle(
-                            color = BambooGold,
+                            color = closedColor,
                             radius = holeRadius,
                             center = Offset(centerX, holeY)
                         )
@@ -200,7 +203,11 @@ fun BansuriVisualizer(
                 val labelX = centerX + fluteWidth * 0.65f
                 drawContext.canvas.nativeCanvas.apply {
                     val paint = android.graphics.Paint().apply {
-                        color = android.graphics.Color.argb(160, 142, 155, 149)
+                        color = if (isPlaying && closedValue > 0.3f) {
+                            android.graphics.Color.parseColor("#EA5454")
+                        } else {
+                            android.graphics.Color.argb(160, 142, 155, 149)
+                        }
                         textSize = 28f
                         isAntiAlias = true
                         typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)

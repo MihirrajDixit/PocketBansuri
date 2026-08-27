@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,6 +43,8 @@ fun RiyaazScreen(
     selectedScale: String?,
     selectedOctave: String?,
     selectedTimer: Int?,
+    playingSwara: Swara?,
+    onPlayingSwaraChanged: (Swara?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(RiyaazSection.PLAIN_SCALE) }
@@ -49,27 +52,38 @@ fun RiyaazScreen(
     // Manage coroutine job for timer-based playback
     val coroutineScope = rememberCoroutineScope()
     var playbackJob by remember { mutableStateOf<Job?>(null) }
-    var playingSwara by remember { mutableStateOf<Swara?>(null) }
 
     val isConfigured = selectedScale != null && selectedOctave != null && selectedTimer != null
+    val view = LocalView.current
 
-    DisposableEffect(Unit) {
+    // Globally mute Android platform touch feedback / click sounds while Riyaaz screen is active
+    DisposableEffect(view) {
+        val root = view.rootView
+        val originalSoundEffects = view.isSoundEffectsEnabled
+        val originalRootSoundEffects = root.isSoundEffectsEnabled
+        
+        view.isSoundEffectsEnabled = false
+        root.isSoundEffectsEnabled = false
+        
         onDispose {
             playbackJob?.cancel()
             AudioEngine.stopReferenceNote()
+            onPlayingSwaraChanged(null)
+            view.isSoundEffectsEnabled = originalSoundEffects
+            root.isSoundEffectsEnabled = originalRootSoundEffects
         }
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(6.dp) // Reduced outer padding
+            .padding(4.dp) // Compact screen padding
     ) {
         // Section Switcher Row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 6.dp),
+                .padding(bottom = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -94,29 +108,29 @@ fun RiyaazScreen(
                                 activeSection = section
                                 playbackJob?.cancel()
                                 AudioEngine.stopReferenceNote()
-                                playingSwara = null
+                                onPlayingSwaraChanged(null)
                             }
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                            .padding(horizontal = 10.dp, vertical = 3.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = label,
                             color = if (isSelected) DeepBackground else TextPrimary,
-                            fontSize = 10.sp,
+                            fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
 
-            // Quick Status Indicator displaying config warning inside the switcher row
+            // Quick Status Indicator
             Badge(
                 containerColor = if (isConfigured) ForestLight.copy(alpha = 0.2f) else Color(0x33EA5454),
                 contentColor = if (isConfigured) ForestLight else Color(0xFFEA5454)
             ) {
                 Text(
                     text = if (isConfigured) "Tuner Ready" else "Configure scale, octave, timer",
-                    fontSize = 9.sp,
+                    fontSize = 8.5.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
@@ -144,7 +158,7 @@ fun RiyaazScreen(
                                 AudioEngine.stopReferenceNote()
                                 
                                 onSwaraSelected(swara)
-                                playingSwara = swara
+                                onPlayingSwaraChanged(swara)
                                 
                                 val midi = swara.getMidiNoteForScaleAndOctave(selectedScale!!, selectedOctave!!)
                                 AudioEngine.playReferenceNote(midi)
@@ -152,7 +166,7 @@ fun RiyaazScreen(
                                 playbackJob = coroutineScope.launch {
                                     delay(selectedTimer!! * 1000L)
                                     AudioEngine.stopReferenceNote()
-                                    playingSwara = null
+                                    onPlayingSwaraChanged(null)
                                 }
                             }
                         }
@@ -173,12 +187,15 @@ fun RiyaazScreen(
                                 AudioEngine.stopReferenceNote()
                                 
                                 onSwaraSelected(swara)
+                                onPlayingSwaraChanged(swara)
+                                
                                 val midi = swara.getMidiNoteForScaleAndOctave(selectedScale!!, selectedOctave!!)
                                 AudioEngine.playReferenceNote(midi)
                                 
                                 playbackJob = coroutineScope.launch {
                                     delay(selectedTimer!! * 1000L)
                                     AudioEngine.stopReferenceNote()
+                                    onPlayingSwaraChanged(null)
                                 }
                             }
                         }
@@ -201,27 +218,28 @@ fun PlainScaleTable(
 ) {
     val swaras = Swara.values().take(7)
     val isConfigured = selectedScale != null && selectedOctave != null && selectedTimer != null
+    val view = LocalView.current
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(SurfaceDark, RoundedCornerShape(8.dp))
-            .padding(8.dp) // Increased padding
+            .padding(horizontal = 4.dp, vertical = 3.dp) // Ultra compact container padding
     ) {
-        // Table Header (3 Columns: Swara, Frequency, Sound) - Spacious
+        // Table Header (3 Columns)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(DeepBackground, RoundedCornerShape(6.dp))
-                .padding(vertical = 6.dp, horizontal = 8.dp),
+                .padding(vertical = 3.dp, horizontal = 6.dp), // Compact header padding
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "Swara", modifier = Modifier.weight(1f), color = BambooGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            Text(text = "Frequency", modifier = Modifier.weight(1.2f), color = BambooGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            Text(text = "Sound", modifier = Modifier.weight(1f), color = BambooGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(text = "Swara", modifier = Modifier.weight(1f), color = BambooGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(text = "Frequency", modifier = Modifier.weight(1.2f), color = BambooGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(text = "Sound", modifier = Modifier.weight(1f), color = BambooGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(2.dp))
 
         // Table Rows
         Column(
@@ -229,7 +247,7 @@ fun PlainScaleTable(
                 .fillMaxWidth()
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+            verticalArrangement = Arrangement.spacedBy(1.dp) // Ultra compact row spacing
         ) {
             swaras.forEach { swara ->
                 val isSelected = swara == activeSwara
@@ -239,6 +257,18 @@ fun PlainScaleTable(
                     swara.getFrequencyForScaleAndOctave(selectedScale!!, selectedOctave!!)
                 } else {
                     null
+                }
+
+                val westernPitch = if (isConfigured) {
+                    swara.getWesternEquivalent(selectedScale!!, selectedOctave!!)
+                } else {
+                    ""
+                }
+
+                val displayNameLabel = if (westernPitch.isNotEmpty()) {
+                    "${swara.displayName} (${swara.hindiName}) • $westernPitch"
+                } else {
+                    "${swara.displayName} (${swara.hindiName})"
                 }
                 
                 Row(
@@ -253,14 +283,15 @@ fun PlainScaleTable(
                             }
                         )
                         .clickable(enabled = isConfigured) {
+                            view.isSoundEffectsEnabled = false
+                            view.rootView.isSoundEffectsEnabled = false
                             onPlaySwara(swara)
                         }
-                        .padding(vertical = 5.dp, horizontal = 8.dp), // More spacious row height
+                        .padding(vertical = 2.dp, horizontal = 6.dp), // Ultra compact row padding
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 1. Swara Name Column
                     Text(
-                        text = "${swara.displayName} (${swara.hindiName})",
+                        text = displayNameLabel,
                         modifier = Modifier.weight(1f),
                         color = if (isConfigured) (if (isSelected) BambooGold else TextPrimary) else TextSecondary.copy(alpha = 0.35f),
                         fontSize = 11.sp,
@@ -275,7 +306,7 @@ fun PlainScaleTable(
                         fontSize = 11.sp
                     )
                     
-                    // 3. Play Button Column (Super compact button height)
+                    // 3. Play Button Column
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -286,7 +317,7 @@ fun PlainScaleTable(
                                 Text(
                                     text = "Playing",
                                     color = ForestLight,
-                                    fontSize = 9.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
@@ -298,7 +329,7 @@ fun PlainScaleTable(
                                 Text(
                                     text = "Play (${selectedTimer}s)",
                                     color = BambooGold,
-                                    fontSize = 9.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
@@ -310,7 +341,7 @@ fun PlainScaleTable(
                                 Text(
                                     text = "Locked 🔒",
                                     color = TextSecondary.copy(alpha = 0.35f),
-                                    fontSize = 8.sp,
+                                    fontSize = 9.sp,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
                                         .background(SurfaceDark.copy(alpha = 0.2f))

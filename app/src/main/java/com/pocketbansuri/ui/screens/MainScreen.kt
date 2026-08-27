@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
 import com.pocketbansuri.AudioEngine
 import com.pocketbansuri.model.Raga
 import com.pocketbansuri.model.Swara
@@ -25,7 +26,6 @@ enum class AppTab(val title: String) {
     TUNER("Tuner")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(modifier: Modifier = Modifier) {
     var activeTab by remember { mutableStateOf(AppTab.RIYAAZ) }
@@ -37,139 +37,132 @@ fun MainScreen(modifier: Modifier = Modifier) {
     var selectedOctave by remember { mutableStateOf<String?>(null) }
     var selectedTimer by remember { mutableStateOf<Int?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "POCKET BANSURI",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black,
-                            color = BambooGold,
-                            letterSpacing = 2.sp
-                        )
-                        Text(
-                            text = "Riyaaz & Tuner Companion",
-                            fontSize = 12.sp,
-                            color = TextSecondary,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                },
-                actions = {
-                    // Segmented Tab Switcher
-                    Row(
-                        modifier = Modifier
-                            .padding(end = 16.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(SurfaceDark)
-                            .border(1.dp, CardBorder, RoundedCornerShape(8.dp))
-                    ) {
-                        AppTab.values().forEach { tab ->
-                            val isSelected = activeTab == tab
-                            Box(
-                                modifier = Modifier
-                                    .padding(2.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (isSelected) ForestLight else Color.Transparent)
-                                    .clickable {
-                                        activeTab = tab
-                                        AudioEngine.stopReferenceNote()
-                                    }
-                                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = tab.title,
-                                    color = if (isSelected) DeepBackground else TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DeepBackground,
-                    titleContentColor = TextPrimary
-                )
-            )
-        },
-        containerColor = DeepBackground
-    ) { innerPadding ->
+    // Lifted playback state to synchronize highlighting between table and visualizer
+    var playingSwara by remember { mutableStateOf<Swara?>(null) }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(DeepBackground)
+    ) {
+        // Custom Compact Title Row
         Row(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .background(DeepBackground)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "POCKET BANSURI",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    color = BambooGold,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = "Riyaaz & Tuner",
+                    fontSize = 10.sp,
+                    color = TextSecondary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            // Segmented Tab Switcher
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(SurfaceDark)
+                    .border(1.dp, CardBorder, RoundedCornerShape(6.dp))
+            ) {
+                AppTab.values().forEach { tab ->
+                    val isSelected = activeTab == tab
+                    Box(
+                        modifier = Modifier
+                            .padding(1.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(if (isSelected) ForestLight else Color.Transparent)
+                            .clickable {
+                                activeTab = tab
+                                AudioEngine.stopReferenceNote()
+                                playingSwara = null
+                            }
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = tab.title,
+                            color = if (isSelected) DeepBackground else TextPrimary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        // Horizontal Divider
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(CardBorder)
+        )
+
+        // Main Content Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
                 .background(DeepBackground),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // ================= SECTION A (20%): Flute Visualizer =================
+            // ================= SECTION A (15%): Flute Visualizer =================
             Box(
                 modifier = Modifier
-                    .weight(0.20f)
+                    .weight(0.15f)
                     .fillMaxHeight(),
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    BansuriVisualizer(
-                        activeSwara = selectedSwara,
-                        selectedOctave = selectedOctave ?: "Mid",
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = "Note: ${selectedSwara.displayName} (${selectedSwara.hindiName})",
-                        color = BambooGold,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
-                    Text(
-                        text = if (selectedScale != null && selectedOctave != null) {
-                            "Freq: ${String.format("%.1f", selectedSwara.getFrequencyForScaleAndOctave(selectedScale!!, selectedOctave!!))} Hz"
-                        } else {
-                            "Freq: -- Hz"
-                        },
-                        color = TextSecondary,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                }
+                BansuriVisualizer(
+                    activeSwara = selectedSwara,
+                    selectedOctave = selectedOctave ?: "Mid",
+                    isPlaying = playingSwara == selectedSwara, // Highlight holes when note is active
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
-            // Vertical divider separating Visualizer (A) from Controls (B)
+            // Vertical divider
             Box(
                 modifier = Modifier
-                    .fillMaxHeight(0.9f)
+                    .fillMaxHeight()
                     .width(1.dp)
                     .background(CardBorder)
             )
 
-            // ================= SECTION B (10%): Global Control Config Panel (Dropdowns, Non-scrollable) =================
+            // ================= SECTION B (10%): Global Control Config Panel =================
             Box(
                 modifier = Modifier
                     .weight(0.10f)
                     .fillMaxHeight()
                     .background(SurfaceDark.copy(alpha = 0.5f))
-                    .padding(horizontal = 6.dp, vertical = 12.dp),
+                    .padding(horizontal = 6.dp, vertical = 8.dp),
                 contentAlignment = Alignment.TopCenter
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = "CONFIG",
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = BambooGold,
                         letterSpacing = 1.sp
@@ -181,16 +174,16 @@ fun MainScreen(modifier: Modifier = Modifier) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("SCALE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("SCALE", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = TextSecondary, textAlign = TextAlign.Center)
+                        Spacer(modifier = Modifier.height(2.dp))
                         Box(modifier = Modifier.fillMaxWidth()) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(30.dp)
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .height(28.dp)
+                                    .clip(RoundedCornerShape(4.dp))
                                     .background(SurfaceDark)
-                                    .border(1.dp, CardBorder, RoundedCornerShape(6.dp))
+                                    .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
                                     .clickable { scaleExpanded = true },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -200,12 +193,12 @@ fun MainScreen(modifier: Modifier = Modifier) {
                                 ) {
                                     Text(
                                         text = selectedScale ?: "-",
-                                        fontSize = 11.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (selectedScale != null) TextPrimary else TextSecondary
                                     )
                                     Spacer(modifier = Modifier.width(2.dp))
-                                    Text("▾", fontSize = 9.sp, color = BambooGold)
+                                    Text("▾", fontSize = 8.sp, color = BambooGold)
                                 }
                             }
                             DropdownMenu(
@@ -213,15 +206,16 @@ fun MainScreen(modifier: Modifier = Modifier) {
                                 onDismissRequest = { scaleExpanded = false },
                                 modifier = Modifier
                                     .background(SurfaceDark)
-                                    .border(1.dp, CardBorder, RoundedCornerShape(6.dp))
+                                    .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
                             ) {
-                                listOf("C", "D", "E", "F", "G", "A", "B").forEach { scale ->
+                                listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B").forEach { scale ->
                                     DropdownMenuItem(
-                                        text = { Text(scale, color = TextPrimary, fontSize = 12.sp) },
+                                        text = { Text(scale, color = TextPrimary, fontSize = 11.sp) },
                                         onClick = {
                                             selectedScale = scale
                                             scaleExpanded = false
                                             AudioEngine.stopReferenceNote()
+                                            playingSwara = null
                                         }
                                     )
                                 }
@@ -229,37 +223,45 @@ fun MainScreen(modifier: Modifier = Modifier) {
                         }
                     }
 
-                    // 2. Octave Dropdown
+                    // 2. Octave Dropdown (Saptak equivalent)
                     var octaveExpanded by remember { mutableStateOf(false) }
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("OCTAVE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("OCTAVE (SAPTAK)", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = TextSecondary, textAlign = TextAlign.Center)
+                        Spacer(modifier = Modifier.height(2.dp))
                         Box(modifier = Modifier.fillMaxWidth()) {
+                            val shortOctaveLabel = when (selectedOctave) {
+                                "Low" -> "Low (Mandra)"
+                                "Mid" -> "Mid (Madhya)"
+                                "High" -> "High (Taar)"
+                                "V.High" -> "V.High (Ati Taar)"
+                                else -> "-"
+                            }
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(30.dp)
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .height(28.dp)
+                                    .clip(RoundedCornerShape(4.dp))
                                     .background(SurfaceDark)
-                                    .border(1.dp, CardBorder, RoundedCornerShape(6.dp))
+                                    .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
                                     .clickable { octaveExpanded = true },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
+                                    horizontalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(horizontal = 2.dp)
                                 ) {
                                     Text(
-                                        text = selectedOctave ?: "-",
-                                        fontSize = 11.sp,
+                                        text = shortOctaveLabel,
+                                        fontSize = 8.sp, // Small font to fit text cleanly
                                         fontWeight = FontWeight.Bold,
                                         color = if (selectedOctave != null) TextPrimary else TextSecondary
                                     )
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Text("▾", fontSize = 9.sp, color = ForestLight)
+                                    Spacer(modifier = Modifier.width(1.dp))
+                                    Text("▾", fontSize = 8.sp, color = ForestLight)
                                 }
                             }
                             DropdownMenu(
@@ -267,15 +269,22 @@ fun MainScreen(modifier: Modifier = Modifier) {
                                 onDismissRequest = { octaveExpanded = false },
                                 modifier = Modifier
                                     .background(SurfaceDark)
-                                    .border(1.dp, CardBorder, RoundedCornerShape(6.dp))
+                                    .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
                             ) {
-                                listOf("Low", "Mid", "High", "Max").forEach { octave ->
+                                val octavePairs = listOf(
+                                    "Low" to "Low (Mandra)",
+                                    "Mid" to "Mid (Madhya)",
+                                    "High" to "High (Taar)",
+                                    "V.High" to "V.High (Ati Taar)"
+                                )
+                                octavePairs.forEach { pair ->
                                     DropdownMenuItem(
-                                        text = { Text(octave, color = TextPrimary, fontSize = 12.sp) },
+                                        text = { Text(pair.second, color = TextPrimary, fontSize = 11.sp) },
                                         onClick = {
-                                            selectedOctave = octave
+                                            selectedOctave = pair.first
                                             octaveExpanded = false
                                             AudioEngine.stopReferenceNote()
+                                            playingSwara = null
                                         }
                                     )
                                 }
@@ -289,16 +298,16 @@ fun MainScreen(modifier: Modifier = Modifier) {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("TIMER", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("TIMER", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = TextSecondary, textAlign = TextAlign.Center)
+                        Spacer(modifier = Modifier.height(2.dp))
                         Box(modifier = Modifier.fillMaxWidth()) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(30.dp)
-                                    .clip(RoundedCornerShape(6.dp))
+                                    .height(28.dp)
+                                    .clip(RoundedCornerShape(4.dp))
                                     .background(SurfaceDark)
-                                    .border(1.dp, CardBorder, RoundedCornerShape(6.dp))
+                                    .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
                                     .clickable { timerExpanded = true },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -308,12 +317,12 @@ fun MainScreen(modifier: Modifier = Modifier) {
                                 ) {
                                     Text(
                                         text = if (selectedTimer != null) "${selectedTimer}s" else "-",
-                                        fontSize = 10.sp,
+                                        fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (selectedTimer != null) TextPrimary else TextSecondary
                                     )
                                     Spacer(modifier = Modifier.width(2.dp))
-                                    Text("▾", fontSize = 9.sp, color = Color(0xFFC88C3C))
+                                    Text("▾", fontSize = 8.sp, color = Color(0xFFC88C3C))
                                 }
                             }
                             DropdownMenu(
@@ -321,15 +330,16 @@ fun MainScreen(modifier: Modifier = Modifier) {
                                 onDismissRequest = { timerExpanded = false },
                                 modifier = Modifier
                                     .background(SurfaceDark)
-                                    .border(1.dp, CardBorder, RoundedCornerShape(6.dp))
+                                    .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
                             ) {
                                 listOf(1, 5, 10, 15, 30, 60, 120).forEach { timer ->
                                     DropdownMenuItem(
-                                        text = { Text("${timer}s", color = TextPrimary, fontSize = 12.sp) },
+                                        text = { Text("${timer}s", color = TextPrimary, fontSize = 11.sp) },
                                         onClick = {
                                             selectedTimer = timer
                                             timerExpanded = false
                                             AudioEngine.stopReferenceNote()
+                                            playingSwara = null
                                         }
                                     )
                                 }
@@ -339,18 +349,18 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 }
             }
 
-            // Vertical divider separating Controls (B) from Practice Area (C)
+            // Vertical divider
             Box(
                 modifier = Modifier
-                    .fillMaxHeight(0.9f)
+                    .fillMaxHeight()
                     .width(1.dp)
                     .background(CardBorder)
             )
 
-            // ================= SECTION C (70%): Practice Station Area =================
+            // ================= SECTION C (75%): Practice Station Area =================
             Box(
                 modifier = Modifier
-                    .weight(0.70f)
+                    .weight(0.75f)
                     .fillMaxHeight()
             ) {
                 when (activeTab) {
@@ -362,7 +372,9 @@ fun MainScreen(modifier: Modifier = Modifier) {
                             activeSwara = selectedSwara,
                             selectedScale = selectedScale,
                             selectedOctave = selectedOctave,
-                            selectedTimer = selectedTimer
+                            selectedTimer = selectedTimer,
+                            playingSwara = playingSwara,
+                            onPlayingSwaraChanged = { playingSwara = it }
                         )
                     }
                     AppTab.TUNER -> {

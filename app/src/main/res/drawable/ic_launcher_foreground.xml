@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Bamboo Flute Body -->
+    <path
+        android:fillColor="#E5A93C"
+        android:pathData="M18,50h72v8h-72z"/>
+    <!-- Thread Bindings -->
+    <path
+        android:fillColor="#8C5E28"
+        android:pathData="M24,50h4v8h-4z M38,50h4v8h-4z M66,50h4v8h-4z M80,50h4v8h-4z"/>
+    <!-- Play Holes -->
+    <path
+        android:fillColor="#0E1311"
+        android:pathData="M32,54m-2,0a2,2 0 1,1 4,0a2,2 0 1,1 -4,0 M46,54m-2,0a2,2 0 1,1 4,0a2,2 0 1,1 -4,0 M52,54m-2,0a2,2 0 1,1 4,0a2,2 0 1,1 -4,0 M58,54m-2,0a2,2 0 1,1 4,0a2,2 0 1,1 -4,0 M72,54m-2,0a2,2 0 1,1 4,0a2,2 0 1,1 -4,0"/>
+</vector>

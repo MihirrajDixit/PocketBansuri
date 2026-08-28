@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -25,25 +26,103 @@ import com.pocketbansuri.AudioEngine
 import com.pocketbansuri.model.Swara
 import com.pocketbansuri.ui.theme.*
 import kotlinx.coroutines.delay
-import kotlin.math.abs
+import kotlin.math.*
+
+data class ChromaticNote(
+    val sargamName: String,
+    val hindiName: String,
+    val westernName: String,
+    val octaveName: String,
+    val targetFrequency: Float
+)
+
+fun getClosestChromaticNote(frequency: Float, scale: String): ChromaticNote {
+    if (frequency <= 20f) {
+        return ChromaticNote("--", "", "--", "MID", 0f)
+    }
+    // Calculate fractional MIDI note number
+    val midi = 69.0 + 12.0 * log2(frequency.toDouble() / 440.0)
+    val closestMidi = round(midi).toInt()
+    
+    val noteNames = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+    val westernName = noteNames[((closestMidi % 12) + 12) % 12] + ((closestMidi / 12) - 1)
+    
+    val scaleOffset = when (scale.uppercase()) {
+        "C" -> 0
+        "C#" -> 1
+        "D" -> 2
+        "D#" -> 3
+        "E" -> 4
+        "F" -> 5
+        "F#" -> 6
+        "G" -> 7
+        "G#" -> 8
+        "A" -> 9
+        "A#" -> 10
+        "B" -> 11
+        else -> 0
+    }
+    
+    val relativeMidi = closestMidi - (60 + scaleOffset)
+    val octaveInt = floor(relativeMidi.toDouble() / 12.0).toInt()
+    val octaveName = when (octaveInt) {
+        -1 -> "LOW"
+        0 -> "MID"
+        1 -> "HIGH"
+        2 -> "V.HIGH"
+        else -> if (octaveInt < -1) "LOW" else "V.HIGH"
+    }
+    
+    val semitone = ((relativeMidi % 12) + 12) % 12
+    val sargamName = when (semitone) {
+        0 -> "Sa"
+        1 -> "re"
+        2 -> "Re"
+        3 -> "ga"
+        4 -> "Ga"
+        5 -> "Ma"
+        6 -> "ma'"
+        7 -> "Pa"
+        8 -> "dha"
+        9 -> "Dha"
+        10 -> "ni"
+        11 -> "Ni"
+        else -> "Sa"
+    }
+    
+    val hindiName = when (semitone) {
+        0 -> "सा"
+        1 -> "रे॒"
+        2 -> "रे"
+        3 -> "ग॒"
+        4 -> "ग"
+        5 -> "म"
+        6 -> "मॅ"
+        7 -> "प"
+        8 -> "ध॒"
+        9 -> "ध"
+        10 -> "नि॒"
+        11 -> "नि"
+        else -> "सा"
+    }
+    
+    val targetFreq = 440.0 * Math.pow(2.0, (closestMidi - 69).toDouble() / 12.0)
+    return ChromaticNote(sargamName, hindiName, westernName, octaveName, targetFreq.toFloat())
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TunerScreen(
-    selectedSwara: Swara,
-    onSwaraSelected: (Swara) -> Unit,
-    selectedScale: String = "C",
-    selectedOctave: String = "MID",
+    selectedScale: String,
+    onScaleChanged: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var detectedFrequency by remember { mutableStateOf(0.0f) }
-    var referencePlayingSwara by remember { mutableStateOf<Swara?>(null) }
     
     // Start and stop the native audio engine
     DisposableEffect(Unit) {
         AudioEngine.startEngine()
         onDispose {
-            AudioEngine.stopReferenceNote()
             AudioEngine.stopEngine()
         }
     }
@@ -56,44 +135,126 @@ fun TunerScreen(
         }
     }
 
-    val closestSwara = Swara.getClosestSwara(detectedFrequency, selectedScale, selectedOctave)
-    val targetFrequency = selectedSwara.getFrequencyForScaleAndOctave(selectedScale, selectedOctave)
+    val closestChromaticNote = getClosestChromaticNote(detectedFrequency, selectedScale)
     
-    // Calculate difference in Hz
-    // If frequency is 0 (silence), diff is 0
+    // Auto-detect which Shuddh note is the target (what I wish to play)
+    val closestShuddhResult = Swara.getClosestSwaraAndOctave(detectedFrequency, selectedScale)
+    val targetSwara = closestShuddhResult.first
+    val targetOctave = closestShuddhResult.second
+    val targetFrequency = targetSwara.getFrequencyForScaleAndOctave(selectedScale, targetOctave)
+    
+    // Calculate difference in Hz relative to the auto-detected target note
     val freqDiff = if (detectedFrequency > 20f) detectedFrequency - targetFrequency else 0f
     
     // Tuning state
     // We define "in-tune" as within 3 Hz of target
     val inTuneThreshold = 3.0f
     val isSilence = detectedFrequency < 20f
+    val isPerfect = abs(freqDiff) <= inTuneThreshold
+
     val tuningColor = when {
         isSilence -> TextSecondary
-        abs(freqDiff) <= inTuneThreshold -> AccentGreen
+        isPerfect -> AccentGreen
         freqDiff < -inTuneThreshold -> PitchFlat
         else -> PitchSharp
     }
 
+    val octaveDisplay = when (closestChromaticNote.octaveName.uppercase()) {
+        "LOW" -> "Low"
+        "MID" -> "Mid"
+        "HIGH" -> "High"
+        "V.HIGH" -> "V.High"
+        else -> closestChromaticNote.octaveName
+    }
+
     val statusText = when {
-        isSilence -> "Play a note or reference"
-        abs(freqDiff) <= inTuneThreshold -> "In Tune! Perfect"
-        freqDiff < -inTuneThreshold -> "Flat (Too Low)"
-        else -> "Sharp (Too High)"
+        isSilence -> "Play a note on your bansuri"
+        isPerfect && closestChromaticNote.sargamName.uppercase() == targetSwara.displayName.uppercase() -> 
+            "Perfect! In Tune & Correct Note"
+        isPerfect -> 
+            "In Tune! (Aiming for ${targetSwara.displayName}, played false note: ${closestChromaticNote.sargamName})"
+        closestChromaticNote.sargamName.uppercase() == targetSwara.displayName.uppercase() -> 
+            if (freqDiff < -inTuneThreshold) "Flat (Too Low)" else "Sharp (Too High)"
+        else -> 
+            "Playing false note: ${closestChromaticNote.sargamName} instead of shuddh ${targetSwara.displayName}"
     }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(12.dp),
         verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 1. Tuner Info and Gauge
+        // 0. Header with configuration dropdown (Scale only)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Auto Tuner",
+                color = BambooGold,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Scale Dropdown
+                var scaleExpanded by remember { mutableStateOf(false) }
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .height(28.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(SurfaceDark)
+                            .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                            .clickable { scaleExpanded = true }
+                            .padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Scale: $selectedScale",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("▾", fontSize = 9.sp, color = BambooGold)
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = scaleExpanded,
+                        onDismissRequest = { scaleExpanded = false },
+                        modifier = Modifier
+                            .background(SurfaceDark)
+                            .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                    ) {
+                        listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B").forEach { scale ->
+                            DropdownMenuItem(
+                                text = { Text(scale, color = TextPrimary, fontSize = 11.sp) },
+                                onClick = {
+                                    onScaleChanged(scale)
+                                    scaleExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 1. Tuner Info and Gauge (Dual target vs detected layout, taking full remaining space)
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f)
-                .padding(bottom = 12.dp),
+                .weight(1f),
             colors = CardDefaults.cardColors(containerColor = SurfaceDark),
             border = BorderStroke(1.dp, CardBorder)
         ) {
@@ -104,53 +265,106 @@ fun TunerScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "TARGET SWARA: ${selectedSwara.displayName} (${selectedSwara.hindiName}) @ ${String.format("%.2f", targetFrequency)} Hz",
-                    color = BambooGold,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
+                // Comparative Note Display
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Wish to Play (Target) Column
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "WISH TO PLAY",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (isSilence) "--" else targetSwara.displayName,
+                                fontSize = 42.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BambooGold
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isSilence) "" else "(${targetSwara.hindiName})",
+                                fontSize = 20.sp,
+                                color = BambooGold.copy(alpha = 0.8f)
+                            )
+                        }
+                        val displayTargetOct = if (isSilence) "Mid" else octaveDisplay
+                        Text(
+                            text = if (isSilence) "--" else "${targetSwara.getWesternEquivalent(selectedScale, targetOctave)} ($displayTargetOct)",
+                            fontSize = 16.sp,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // Vertical Divider
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(70.dp)
+                            .background(CardBorder)
+                    )
+
+                    // Actually Played (Detected) Column
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "ACTUALLY PLAYED",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (isSilence) "--" else closestChromaticNote.sargamName,
+                                fontSize = 42.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = tuningColor
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isSilence) "" else "(${closestChromaticNote.hindiName})",
+                                fontSize = 20.sp,
+                                color = tuningColor.copy(alpha = 0.8f)
+                            )
+                        }
+                        Text(
+                            text = if (isSilence) "--" else "${closestChromaticNote.westernName} ($octaveDisplay)",
+                            fontSize = 16.sp,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Detected Note & Freq Row
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = if (isSilence) "--" else closestSwara.displayName,
-                        fontSize = 54.sp,
-                        fontWeight = FontWeight.Black,
-                        color = tuningColor
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (isSilence) "" else "(${closestSwara.hindiName})",
-                        fontSize = 24.sp,
-                        color = tuningColor.copy(alpha = 0.8f)
-                    )
-                }
-
                 Text(
                     text = if (isSilence) "0.00 Hz" else String.format("%.2f Hz", detectedFrequency),
-                    fontSize = 18.sp,
+                    fontSize = 15.sp,
                     color = TextPrimary,
                     fontWeight = FontWeight.Medium
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // Linear Tuning Meter/Gauge
+                // Linear Tuning Meter/Gauge (shows deviation from Wish to Play target frequency)
                 TuningMeter(
                     freqDiff = freqDiff,
-                    maxDeviationHz = 15f,
+                    maxDeviationHz = 20f,
                     tuningColor = tuningColor,
                     isSilence = isSilence
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
                     text = statusText,
@@ -158,88 +372,6 @@ fun TunerScreen(
                     color = tuningColor,
                     fontWeight = FontWeight.SemiBold
                 )
-            }
-        }
-
-        // 2. Swara Row Controls
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Tap to set target. Long-press to toggle Reference Sound.",
-                color = TextSecondary,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(bottom = 8.dp),
-                textAlign = TextAlign.Center
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                Swara.values().forEach { swara ->
-                    val isSelected = swara == selectedSwara
-                    val isRefPlaying = swara == referencePlayingSwara
-
-                    val buttonBgColor = when {
-                        isRefPlaying -> ForestLight
-                        isSelected -> BambooGold
-                        else -> SurfaceDark
-                    }
-                    val buttonTextColor = when {
-                        isRefPlaying || isSelected -> DeepBackground
-                        else -> TextPrimary
-                    }
-                    
-                    val borderColor = when {
-                        isRefPlaying -> ForestLight
-                        isSelected -> BambooGold
-                        else -> CardBorder
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(width = 54.dp, height = 54.dp)
-                            .clip(CircleShape)
-                            .background(buttonBgColor)
-                            .border(1.dp, borderColor, CircleShape)
-                            .combinedClickable(
-                                onClick = {
-                                    onSwaraSelected(swara)
-                                },
-                                onLongClick = {
-                                    if (referencePlayingSwara == swara) {
-                                        AudioEngine.stopReferenceNote()
-                                        referencePlayingSwara = null
-                                    } else {
-                                        AudioEngine.stopReferenceNote()
-                                        AudioEngine.playReferenceNote(swara.getMidiNoteForScaleAndOctave(selectedScale, selectedOctave))
-                                        referencePlayingSwara = swara
-                                        onSwaraSelected(swara)
-                                    }
-                                }
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = swara.hindiName,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = buttonTextColor
-                            )
-                            Text(
-                                text = swara.displayName,
-                                fontSize = 10.sp,
-                                color = buttonTextColor.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-                }
             }
         }
     }
@@ -278,7 +410,7 @@ fun TuningMeter(
                 .background(CardBorder)
         ) {
             // Underlay ticks
-            // Left Tick (-15Hz), Center, Right (+15Hz)
+            // Left Tick (-maxDeviationHz), Center, Right (+maxDeviationHz)
             Row(
                 modifier = Modifier.fillMaxSize(),
                 horizontalArrangement = Arrangement.SpaceBetween

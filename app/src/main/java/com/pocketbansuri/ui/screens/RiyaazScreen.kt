@@ -1,15 +1,13 @@
 package com.pocketbansuri.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pocketbansuri.AudioEngine
@@ -45,6 +44,11 @@ fun RiyaazScreen(
     selectedTimer: Int?,
     playingSwara: Swara?,
     onPlayingSwaraChanged: (Swara?) -> Unit,
+    playingOctave: String?,
+    onPlayingOctaveChanged: (String?) -> Unit,
+    onScaleChanged: (String) -> Unit,
+    onTimerChanged: (Int) -> Unit,
+    onOctaveChanged: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(RiyaazSection.PLAIN_SCALE) }
@@ -53,7 +57,7 @@ fun RiyaazScreen(
     val coroutineScope = rememberCoroutineScope()
     var playbackJob by remember { mutableStateOf<Job?>(null) }
 
-    val isConfigured = selectedScale != null && selectedOctave != null && selectedTimer != null
+    val isConfigured = selectedScale != null && selectedTimer != null
     val view = LocalView.current
 
     // Globally mute Android platform touch feedback / click sounds while Riyaaz screen is active
@@ -69,6 +73,7 @@ fun RiyaazScreen(
             playbackJob?.cancel()
             AudioEngine.stopReferenceNote()
             onPlayingSwaraChanged(null)
+            onPlayingOctaveChanged(null)
             view.isSoundEffectsEnabled = originalSoundEffects
             root.isSoundEffectsEnabled = originalRootSoundEffects
         }
@@ -109,31 +114,158 @@ fun RiyaazScreen(
                                 playbackJob?.cancel()
                                 AudioEngine.stopReferenceNote()
                                 onPlayingSwaraChanged(null)
+                                onPlayingOctaveChanged(null)
                             }
-                            .padding(horizontal = 10.dp, vertical = 3.dp),
+                            .padding(horizontal = 12.dp, vertical = 5.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = label,
                             color = if (isSelected) DeepBackground else TextPrimary,
-                            fontSize = 9.5.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
 
-            // Quick Status Indicator
-            Badge(
-                containerColor = if (isConfigured) ForestLight.copy(alpha = 0.2f) else Color(0x33EA5454),
-                contentColor = if (isConfigured) ForestLight else Color(0xFFEA5454)
+            // Quick Configuration Dropdowns Row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (isConfigured) "Tuner Ready" else "Configure scale, octave, timer",
-                    fontSize = 8.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                )
+                // Timer Dropdown (only visible in Plain Scale practice)
+                if (activeSection == RiyaazSection.PLAIN_SCALE) {
+                    var timerExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .height(26.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(SurfaceDark)
+                                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                                .clickable { timerExpanded = true }
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Timer: ${selectedTimer?.let { "${it}s" } ?: "-"}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedTimer != null) TextPrimary else TextSecondary
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("▾", fontSize = 8.sp, color = ForestLight)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = timerExpanded,
+                            onDismissRequest = { timerExpanded = false },
+                            modifier = Modifier
+                                .background(SurfaceDark)
+                                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                        ) {
+                            listOf(1, 5, 10, 15, 30, 60, 120).forEach { timer ->
+                                DropdownMenuItem(
+                                    text = { Text("${timer}s", color = TextPrimary, fontSize = 11.sp) },
+                                    onClick = {
+                                        onTimerChanged(timer)
+                                        timerExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Octave Dropdown (only visible in Raga Practice)
+                if (activeSection == RiyaazSection.RAGA_LIBRARY) {
+                    var octaveExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .height(26.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(SurfaceDark)
+                                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                                .clickable { octaveExpanded = true }
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Octave: ${selectedOctave ?: "-"}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedOctave != null) TextPrimary else TextSecondary
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("▾", fontSize = 8.sp, color = ForestLight)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = octaveExpanded,
+                            onDismissRequest = { octaveExpanded = false },
+                            modifier = Modifier
+                                .background(SurfaceDark)
+                                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                        ) {
+                            listOf("Low", "Mid", "High", "V.High").forEach { octave ->
+                                DropdownMenuItem(
+                                    text = { Text(octave, color = TextPrimary, fontSize = 11.sp) },
+                                    onClick = {
+                                        onOctaveChanged(octave)
+                                        octaveExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Scale Dropdown
+                var scaleExpanded by remember { mutableStateOf(false) }
+                Box {
+                    Box(
+                        modifier = Modifier
+                            .height(26.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(SurfaceDark)
+                            .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                            .clickable { scaleExpanded = true }
+                            .padding(horizontal = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Scale: ${selectedScale ?: "-"}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selectedScale != null) TextPrimary else TextSecondary
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("▾", fontSize = 8.sp, color = BambooGold)
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = scaleExpanded,
+                        onDismissRequest = { scaleExpanded = false },
+                        modifier = Modifier
+                            .background(SurfaceDark)
+                            .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                    ) {
+                        listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B").forEach { scale ->
+                            DropdownMenuItem(
+                                text = { Text(scale, color = TextPrimary, fontSize = 11.sp) },
+                                onClick = {
+                                    onScaleChanged(scale)
+                                    scaleExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -149,24 +281,26 @@ fun RiyaazScreen(
                         selectedScale = selectedScale,
                         selectedOctave = selectedOctave,
                         selectedTimer = selectedTimer,
-                        activeSwara = activeSwara,
-                        onSwaraSelected = onSwaraSelected,
                         playingSwara = playingSwara,
-                        onPlaySwara = { swara ->
-                            if (isConfigured) {
+                        playingOctave = playingOctave,
+                        onPlaySwara = { swara, octave ->
+                            if (selectedScale != null && selectedTimer != null) {
                                 playbackJob?.cancel()
                                 AudioEngine.stopReferenceNote()
                                 
                                 onSwaraSelected(swara)
                                 onPlayingSwaraChanged(swara)
+                                onPlayingOctaveChanged(octave)
+                                onOctaveChanged(octave) // Highlight the row and update visualizer on click!
                                 
-                                val midi = swara.getMidiNoteForScaleAndOctave(selectedScale!!, selectedOctave!!)
+                                val midi = swara.getMidiNoteForScaleAndOctave(selectedScale, octave)
                                 AudioEngine.playReferenceNote(midi)
                                 
                                 playbackJob = coroutineScope.launch {
-                                    delay(selectedTimer!! * 1000L)
+                                    delay(selectedTimer * 1000L)
                                     AudioEngine.stopReferenceNote()
                                     onPlayingSwaraChanged(null)
+                                    onPlayingOctaveChanged(null)
                                 }
                             }
                         }
@@ -174,31 +308,9 @@ fun RiyaazScreen(
                 }
                 RiyaazSection.RAGA_LIBRARY -> {
                     RagaLibraryPractice(
-                        selectedRaga = selectedRaga,
                         selectedScale = selectedScale,
                         selectedOctave = selectedOctave,
-                        selectedTimer = selectedTimer,
-                        activeSwara = activeSwara,
-                        onRagaSelected = onRagaSelected,
-                        onSwaraSelected = onSwaraSelected,
-                        onPlaySwara = { swara ->
-                            if (isConfigured) {
-                                playbackJob?.cancel()
-                                AudioEngine.stopReferenceNote()
-                                
-                                onSwaraSelected(swara)
-                                onPlayingSwaraChanged(swara)
-                                
-                                val midi = swara.getMidiNoteForScaleAndOctave(selectedScale!!, selectedOctave!!)
-                                AudioEngine.playReferenceNote(midi)
-                                
-                                playbackJob = coroutineScope.launch {
-                                    delay(selectedTimer!! * 1000L)
-                                    AudioEngine.stopReferenceNote()
-                                    onPlayingSwaraChanged(null)
-                                }
-                            }
-                        }
+                        onSwaraSelected = onSwaraSelected
                     )
                 }
             }
@@ -211,143 +323,180 @@ fun PlainScaleTable(
     selectedScale: String?,
     selectedOctave: String?,
     selectedTimer: Int?,
-    activeSwara: Swara,
-    onSwaraSelected: (Swara) -> Unit,
     playingSwara: Swara?,
-    onPlaySwara: (Swara) -> Unit
+    playingOctave: String?,
+    onPlaySwara: (Swara, String) -> Unit
 ) {
     val swaras = Swara.values().take(7)
-    val isConfigured = selectedScale != null && selectedOctave != null && selectedTimer != null
-    val view = LocalView.current
+    val isConfigured = selectedScale != null && selectedTimer != null
+
+    val octaves = listOf(
+        OctaveConfig("Low", "Low (Mandra)"),
+        OctaveConfig("Mid", "Mid (Madhya)"),
+        OctaveConfig("High", "High (Taar)"),
+        OctaveConfig("V.High", "V.High (Ati)")
+    )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(SurfaceDark, RoundedCornerShape(8.dp))
-            .padding(horizontal = 4.dp, vertical = 3.dp) // Ultra compact container padding
+            .padding(horizontal = 4.dp, vertical = 0.dp),
+        verticalArrangement = Arrangement.spacedBy(0.5.dp)
     ) {
-        // Table Header (3 Columns)
+        // Table Header (8 columns: 1 Label + 7 Swaras)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(DeepBackground, RoundedCornerShape(6.dp))
-                .padding(vertical = 3.dp, horizontal = 6.dp), // Compact header padding
+                .padding(vertical = 1.dp, horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "Swara", modifier = Modifier.weight(1f), color = BambooGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(text = "Frequency", modifier = Modifier.weight(1.2f), color = BambooGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(text = "Sound", modifier = Modifier.weight(1f), color = BambooGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(
+                text = "Octave",
+                modifier = Modifier.weight(0.9f),
+                color = BambooGold,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            swaras.forEach { swara ->
+                Text(
+                    text = "${swara.displayName} (${swara.hindiName})",
+                    modifier = Modifier.weight(1f),
+                    color = BambooGold,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(1.dp))
 
-        // Table Rows
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(1.dp) // Ultra compact row spacing
-        ) {
-            swaras.forEach { swara ->
-                val isSelected = swara == activeSwara
-                val isPlaying = playingSwara == swara
-                
-                val frequency = if (isConfigured) {
-                    swara.getFrequencyForScaleAndOctave(selectedScale!!, selectedOctave!!)
-                } else {
-                    null
-                }
+        // Table Rows (4 Octaves * 2 Rows = 8 Rows total)
+        octaves.forEach { oct ->
+            val isCurrentOctaveSelected = selectedOctave?.uppercase() == oct.id.uppercase()
+            val rowBgColor = if (isCurrentOctaveSelected) {
+                ForestLight.copy(alpha = 0.06f)
+            } else {
+                Color.Transparent
+            }
 
-                val westernPitch = if (isConfigured) {
-                    swara.getWesternEquivalent(selectedScale!!, selectedOctave!!)
-                } else {
-                    ""
-                }
+            val octaveBorder = if (isCurrentOctaveSelected) {
+                BorderStroke(1.dp, ForestLight.copy(alpha = 0.35f))
+            } else {
+                null
+            }
 
-                val displayNameLabel = if (westernPitch.isNotEmpty()) {
-                    "${swara.displayName} (${swara.hindiName}) • $westernPitch"
-                } else {
-                    "${swara.displayName} (${swara.hindiName})"
-                }
-                
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(rowBgColor)
+                    .then(if (octaveBorder != null) Modifier.border(octaveBorder, RoundedCornerShape(4.dp)) else Modifier)
+                    .padding(vertical = 0.dp)
+            ) {
+                // Row 1/3/5/7: Swara cell row
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(
-                            when {
-                                isPlaying -> ForestLight.copy(alpha = 0.2f)
-                                isSelected -> ForestLight.copy(alpha = 0.08f)
-                                else -> Color.Transparent
-                            }
-                        )
-                        .clickable(enabled = isConfigured) {
-                            view.isSoundEffectsEnabled = false
-                            view.rootView.isSoundEffectsEnabled = false
-                            onPlaySwara(swara)
-                        }
-                        .padding(vertical = 2.dp, horizontal = 6.dp), // Ultra compact row padding
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = displayNameLabel,
-                        modifier = Modifier.weight(1f),
-                        color = if (isConfigured) (if (isSelected) BambooGold else TextPrimary) else TextSecondary.copy(alpha = 0.35f),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    // 2. Frequency Column
-                    Text(
-                        text = if (frequency != null) String.format("%.2f Hz", frequency) else "-- Hz",
-                        modifier = Modifier.weight(1.2f),
-                        color = if (isConfigured) TextPrimary else TextSecondary.copy(alpha = 0.35f),
-                        fontSize = 11.sp
-                    )
-                    
-                    // 3. Play Button Column
+                    // Octave Label Column
                     Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .wrapContentWidth(Alignment.Start)
+                            .weight(0.9f)
+                            .padding(horizontal = 2.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        when {
-                            isPlaying -> {
-                                Text(
-                                    text = "Playing",
-                                    color = ForestLight,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(ForestLight.copy(alpha = 0.15f))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                            isConfigured -> {
-                                Text(
-                                    text = "Play (${selectedTimer}s)",
-                                    color = BambooGold,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(CardBorder)
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                            else -> {
-                                Text(
-                                    text = "Locked 🔒",
-                                    color = TextSecondary.copy(alpha = 0.35f),
-                                    fontSize = 9.sp,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(SurfaceDark.copy(alpha = 0.2f))
-                                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                                )
-                            }
+                        Text(
+                            text = oct.displayName,
+                            color = if (isCurrentOctaveSelected) BambooGold else TextSecondary,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    // 7 Swara buttons
+                    swaras.forEach { swara ->
+                        val isPlayingThis = playingSwara == swara && playingOctave?.uppercase() == oct.id.uppercase()
+                        
+                        val westernPitch = if (selectedScale != null) {
+                            swara.getWesternEquivalent(selectedScale, oct.id)
+                        } else {
+                            ""
+                        }
+
+                        val cellBg = when {
+                            isPlayingThis -> ForestLight.copy(alpha = 0.25f)
+                            else -> Color.Transparent
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(1.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(cellBg)
+                                .border(0.5.dp, CardBorder.copy(alpha = 0.5f), RoundedCornerShape(3.dp))
+                                .clickable(enabled = isConfigured) {
+                                    onPlaySwara(swara, oct.id)
+                                }
+                                .padding(vertical = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = westernPitch.ifEmpty { "-" },
+                                color = if (isPlayingThis) ForestLight else (if (isConfigured) TextPrimary else TextSecondary.copy(alpha = 0.4f)),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                // Row 2/4/6/8: Frequency row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Freq Label Column
+                    Box(
+                        modifier = Modifier
+                            .weight(0.9f)
+                            .padding(horizontal = 2.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Freq",
+                            color = TextSecondary.copy(alpha = 0.7f),
+                            fontSize = 9.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    // 7 Freq cells
+                    swaras.forEach { swara ->
+                        val frequency = if (selectedScale != null) {
+                            swara.getFrequencyForScaleAndOctave(selectedScale, oct.id)
+                        } else {
+                            null
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(vertical = 0.5.dp, horizontal = 1.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (frequency != null) String.format("%.1f", frequency) else "--",
+                                color = if (isConfigured) TextSecondary else TextSecondary.copy(alpha = 0.4f),
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Normal
+                            )
                         }
                     }
                 }
@@ -358,184 +507,227 @@ fun PlainScaleTable(
 
 @Composable
 fun RagaLibraryPractice(
-    selectedRaga: Raga,
     selectedScale: String?,
     selectedOctave: String?,
-    selectedTimer: Int?,
-    activeSwara: Swara,
-    onRagaSelected: (Raga) -> Unit,
     onSwaraSelected: (Swara) -> Unit,
-    onPlaySwara: (Swara) -> Unit
+    modifier: Modifier = Modifier
 ) {
     val ragas = Raga.dummyRagas
-    val isConfigured = selectedScale != null && selectedOctave != null && selectedTimer != null
+    val coroutineScope = rememberCoroutineScope()
+    var playingRaga by remember { mutableStateOf<Raga?>(null) }
+    var playingNoteIndex by remember { mutableStateOf<Int?>(null) }
+    var playbackJob by remember { mutableStateOf<Job?>(null) }
+    
+    // Ensure playback is stopped on dispose
+    DisposableEffect(Unit) {
+        onDispose {
+            playbackJob?.cancel()
+            AudioEngine.stopReferenceNote()
+        }
+    }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         items(ragas) { raga ->
-            val isSelected = raga.name == selectedRaga.name
-
+            val isCurrentRagaPlaying = playingRaga?.name == raga.name
+            
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable {
-                        onRagaSelected(raga)
-                        AudioEngine.stopReferenceNote()
-                    },
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSelected) SurfaceDark else DeepBackground
-                ),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = if (isSelected) BambooGold else CardBorder
-                )
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                border = BorderStroke(1.dp, if (isCurrentRagaPlaying) ForestLight else CardBorder),
+                shape = RoundedCornerShape(10.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp)
+                        .padding(14.dp)
                 ) {
+                    // Row 1: Raga Name, Category Tag, Play Button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Text(
                                 text = raga.name,
-                                fontSize = 16.sp,
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isSelected) BambooGold else TextPrimary
+                                color = BambooGold
                             )
-                            Text(
-                                text = "Vadi: ${raga.vadi} | Samvadi: ${raga.samvadi}",
-                                fontSize = 11.sp,
-                                color = TextSecondary
-                            )
-                        }
-
-                        if (isSelected && isConfigured) {
-                            Badge(
-                                containerColor = ForestLight,
-                                contentColor = TextPrimary
+                            // Category Tag
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(CardBorder)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "Scale: $selectedScale | $selectedOctave",
+                                    text = raga.category,
+                                    color = TextSecondary,
                                     fontSize = 10.sp,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    fontWeight = FontWeight.Bold,
-                                    color = DeepBackground
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
-                    }
-
-                    AnimatedVisibility(visible = isSelected) {
-                        Column(
+                        
+                        // Play/Stop Button
+                        Box(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 8.dp)
-                        ) {
-                            Text(
-                                text = raga.description,
-                                fontSize = 12.sp,
-                                color = TextSecondary,
-                                lineHeight = 16.sp
-                            )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Aaroh (Ascent)",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = BambooGold
-                                    )
-                                    Text(
-                                        text = raga.aaroh,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = TextPrimary
-                                    )
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Avroh (Descent)",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = BambooGold
-                                    )
-                                    Text(
-                                        text = raga.avroh,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = TextPrimary
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Text(
-                                text = if (isConfigured) {
-                                    "Practice Notes in $selectedScale ($selectedOctave) (Tap to hear for ${selectedTimer}s):"
-                                } else {
-                                    "Practice Notes (Configure scale/octave/timer in B to play):"
-                                },
-                                fontSize = 10.sp,
-                                color = TextSecondary,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            )
-
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                raga.swarasUsed.forEach { swara ->
-                                    val isSwaraActive = swara == activeSwara
-                                    val swaraBg = if (isSwaraActive && isConfigured) ForestLight else CardBorder
-                                    val swaraText = if (isSwaraActive && isConfigured) DeepBackground else TextPrimary
-
-                                    Box(
-                                        modifier = Modifier
-                                            .size(width = 56.dp, height = 38.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(swaraBg)
-                                            .clickable(enabled = isConfigured) {
-                                                onPlaySwara(swara)
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.Center
-                                        ) {
-                                            Text(
-                                                text = swara.displayName,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = swaraText
-                                            )
-                                            if (isConfigured) {
-                                                Text(
-                                                    text = String.format("%.0fHz", swara.getFrequencyForScaleAndOctave(selectedScale!!, selectedOctave!!)),
-                                                    fontSize = 8.sp,
-                                                    color = if (isSwaraActive) DeepBackground.copy(alpha = 0.7f) else TextSecondary
-                                                )
+                                .size(34.dp)
+                                .clip(CircleShape)
+                                .background(if (isCurrentRagaPlaying) PitchFlat else ForestLight)
+                                .clickable {
+                                    if (isCurrentRagaPlaying) {
+                                        playbackJob?.cancel()
+                                        AudioEngine.stopReferenceNote()
+                                        playingRaga = null
+                                        playingNoteIndex = null
+                                    } else {
+                                        playbackJob?.cancel()
+                                        playingRaga = raga
+                                        playingNoteIndex = 0
+                                        
+                                        playbackJob = coroutineScope.launch {
+                                            val scale = selectedScale ?: "C"
+                                            val octave = selectedOctave ?: "Mid"
+                                            val allNotes = raga.aarohNotes + raga.avrohNotes
+                                            
+                                            for (index in allNotes.indices) {
+                                                playingNoteIndex = index
+                                                val note = allNotes[index]
+                                                
+                                                // Convert scale and octave to MIDI offset
+                                                val scaleOffset = when (scale.uppercase()) {
+                                                    "C" -> 0; "C#" -> 1; "D" -> 2; "D#" -> 3; "E" -> 4; "F" -> 5; "F#" -> 6; "G" -> 7; "G#" -> 8; "A" -> 9; "A#" -> 10; "B" -> 11; else -> 0
+                                                }
+                                                val octaveOffset = when (octave.lowercase()) {
+                                                    "low" -> -12; "mid" -> 0; "high" -> 12; "v.high" -> 24; else -> 0
+                                                }
+                                                val baseMidi = 60 + scaleOffset + octaveOffset
+                                                
+                                                val baseOffset = when {
+                                                    note.startsWith("Sa") || note.startsWith("SA") -> 0
+                                                    note.startsWith("re") -> 1
+                                                    note.startsWith("Re") -> 2
+                                                    note.startsWith("ga") -> 3
+                                                    note.startsWith("Ga") -> 4
+                                                    note.startsWith("Ma#") || note.startsWith("ma#") -> 6
+                                                    note.startsWith("Ma") || note.startsWith("ma") -> 5
+                                                    note.startsWith("Pa") -> 7
+                                                    note.startsWith("dha") -> 8
+                                                    note.startsWith("Dha") -> 9
+                                                    note.startsWith("ni") -> 10
+                                                    note.startsWith("Ni") -> 11
+                                                    else -> 0
+                                                }
+                                                
+                                                val octaveModifier = when {
+                                                    note.endsWith("'") -> 12
+                                                    note.endsWith("_") -> -12
+                                                    else -> 0
+                                                }
+                                                
+                                                val midiNote = baseMidi + baseOffset + octaveModifier
+                                                AudioEngine.playReferenceNote(midiNote)
+                                                
+                                                // Update flute visualizer
+                                                val swara = when {
+                                                    note.startsWith("Sa'") -> Swara.HIGH_SA
+                                                    note.startsWith("Sa") || note.startsWith("SA") -> Swara.SA
+                                                    note.startsWith("re") || note.startsWith("Re") -> Swara.RE
+                                                    note.startsWith("ga") || note.startsWith("Ga") -> Swara.GA
+                                                    note.startsWith("Ma") || note.startsWith("ma") -> Swara.MA
+                                                    note.startsWith("Pa") -> Swara.PA
+                                                    note.startsWith("dha") || note.startsWith("Dha") -> Swara.DHA
+                                                    note.startsWith("ni") || note.startsWith("Ni") -> Swara.NI
+                                                    else -> Swara.SA
+                                                }
+                                                onSwaraSelected(swara)
+                                                
+                                                delay(700L)
                                             }
+                                            
+                                            AudioEngine.stopReferenceNote()
+                                            playingRaga = null
+                                            playingNoteIndex = null
                                         }
                                     }
-                                }
-                            }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (isCurrentRagaPlaying) "■" else "▶",
+                                color = DeepBackground,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    // Row 2: Vadi & Samvadi Configs
+                    Text(
+                        text = "Vadi: ${raga.vadi}   |   Samvadi: ${raga.samvadi}",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = TextSecondary
+                    )
+                    
+                    Spacer(modifier = Modifier.height(6.dp))
+                    
+                    // Row 3: Aaroh notes
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Aaroh: ",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BambooGold
+                        )
+                        raga.aarohNotes.forEachIndexed { idx, note ->
+                            val isHighlighted = isCurrentRagaPlaying && playingNoteIndex == idx
+                            Text(
+                                text = note.replace("ma#", "Ma#").replace("Ma#", "M'"),
+                                fontSize = if (isHighlighted) 22.sp else 18.sp,
+                                fontWeight = if (isHighlighted) FontWeight.Black else FontWeight.Bold,
+                                color = if (isHighlighted) ForestLight else TextPrimary,
+                                modifier = Modifier.padding(horizontal = 2.dp)
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    // Row 4: Avroh notes
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Avroh: ",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BambooGold
+                        )
+                        raga.avrohNotes.forEachIndexed { idx, note ->
+                            val combinedIndex = raga.aarohNotes.size + idx
+                            val isHighlighted = isCurrentRagaPlaying && playingNoteIndex == combinedIndex
+                            Text(
+                                text = note.replace("ma#", "Ma#").replace("Ma#", "M'"),
+                                fontSize = if (isHighlighted) 22.sp else 18.sp,
+                                fontWeight = if (isHighlighted) FontWeight.Black else FontWeight.Bold,
+                                color = if (isHighlighted) ForestLight else TextPrimary,
+                                modifier = Modifier.padding(horizontal = 2.dp)
+                            )
                         }
                     }
                 }
@@ -543,3 +735,5 @@ fun RagaLibraryPractice(
         }
     }
 }
+
+data class OctaveConfig(val id: String, val displayName: String)

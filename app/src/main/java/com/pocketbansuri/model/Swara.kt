@@ -22,7 +22,7 @@ enum class Swara(
     /**
      * Gets the fingering list for a given octave.
      */
-    fun getFingeringForOctave(octave: String): List<Float> {
+    fun getFingeringForOctave(@Suppress("UNUSED_PARAMETER") octave: String): List<Float> {
         return this.baseFingering
     }
 
@@ -85,9 +85,42 @@ enum class Swara(
     }
 
     companion object {
-        fun getClosestSwara(frequency: Float, scale: String = "C", octave: String = "MID"): Swara {
+        fun getClosestSwara(frequency: Float, scale: String = "C", @Suppress("UNUSED_PARAMETER") octave: String = "MID"): Swara {
             if (frequency <= 0f) return SA
-            return values().minByOrNull { abs(it.getFrequencyForScaleAndOctave(scale, octave) - frequency) } ?: SA
+            val octaves = listOf("LOW", "MID", "HIGH", "V.HIGH")
+            var closestSwara = SA
+            var minDiff = Float.MAX_VALUE
+            for (oct in octaves) {
+                for (swara in values()) {
+                    val targetFreq = swara.getFrequencyForScaleAndOctave(scale, oct)
+                    val diff = abs(targetFreq - frequency)
+                    if (diff < minDiff) {
+                        minDiff = diff
+                        closestSwara = swara
+                    }
+                }
+            }
+            return closestSwara
+        }
+
+        fun getClosestSwaraAndOctave(frequency: Float, scale: String = "C"): Pair<Swara, String> {
+            if (frequency <= 0f) return Pair(SA, "MID")
+            val octaves = listOf("LOW", "MID", "HIGH", "V.HIGH")
+            var closestSwara = SA
+            var closestOctave = "MID"
+            var minDiff = Float.MAX_VALUE
+            for (oct in octaves) {
+                for (swara in values()) {
+                    val targetFreq = swara.getFrequencyForScaleAndOctave(scale, oct)
+                    val diff = abs(targetFreq - frequency)
+                    if (diff < minDiff) {
+                        minDiff = diff
+                        closestSwara = swara
+                        closestOctave = oct
+                    }
+                }
+            }
+            return Pair(closestSwara, closestOctave)
         }
     }
 }

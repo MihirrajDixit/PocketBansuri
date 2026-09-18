@@ -79,22 +79,38 @@ fun RiyaazScreen(
     onSwaraSelected: (Swara) -> Unit,
     activeSwara: Swara,
     selectedScale: String?,
+    effectiveScale: String? = null,
     selectedOctave: String?,
     selectedTimer: Int?,
     playingSwara: Swara?,
     onPlayingSwaraChanged: (Swara?) -> Unit,
     playingOctave: String?,
     onPlayingOctaveChanged: (String?) -> Unit,
+    detectedSwara: Swara? = null,
+    onDetectedSwaraChanged: ((Swara?) -> Unit)? = null,
+    detectedOctave: String? = null,
+    onDetectedOctaveChanged: ((String?) -> Unit)? = null,
     onScaleChanged: (String) -> Unit,
     onTimerChanged: (Int) -> Unit,
     onOctaveChanged: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val activePlayScale = effectiveScale ?: selectedScale
     var activeSection by remember { mutableStateOf(RiyaazSection.PLAIN_SCALE) }
     var practiceMode by remember { mutableStateOf(PracticeMode.PLAY) }
     
-    var detectedSwara by remember { mutableStateOf<Swara?>(null) }
-    var detectedOctave by remember { mutableStateOf<String?>(null) }
+    var internalDetectedSwara by remember { mutableStateOf<Swara?>(null) }
+    var internalDetectedOctave by remember { mutableStateOf<String?>(null) }
+
+    val currentDetectedSwara = detectedSwara ?: internalDetectedSwara
+    val currentDetectedOctave = detectedOctave ?: internalDetectedOctave
+
+    fun updateDetected(swara: Swara?, octave: String?) {
+        internalDetectedSwara = swara
+        internalDetectedOctave = octave
+        onDetectedSwaraChanged?.invoke(swara)
+        onDetectedOctaveChanged?.invoke(octave)
+    }
     
     val recentlyPlayed = remember { mutableStateMapOf<String, Long>() }
     var fadeTrigger by remember { mutableStateOf(0) }
@@ -131,16 +147,15 @@ fun RiyaazScreen(
             AudioEngine.startEngine()
         } else {
             AudioEngine.stopEngine()
-            detectedSwara = null
-            detectedOctave = null
+            updateDetected(null, null)
             recentlyPlayed.clear()
         }
     }
 
     // Real-time microphone audio polling & mapping loop
     if (activeSection == RiyaazSection.PLAIN_SCALE && (practiceMode == PracticeMode.LISTEN || practiceMode == PracticeMode.BOTH)) {
-        LaunchedEffect(selectedScale) {
-            val scale = selectedScale ?: "C"
+        LaunchedEffect(activePlayScale) {
+            val scale = activePlayScale ?: "C"
             val swaras = Swara.values().take(7)
             val octaveIds = listOf("Low", "Mid", "High", "V.High")
             while (true) {
@@ -149,19 +164,17 @@ fun RiyaazScreen(
                 if (freq > 0f) {
                     val match = findClosestCell(freq, scale, swaras, octaveIds)
                     if (match != null) {
-                        if (detectedSwara != match.first || detectedOctave != match.second) {
-                            detectedSwara = match.first
-                            detectedOctave = match.second
+                        if (currentDetectedSwara != match.first || currentDetectedOctave != match.second) {
+                            updateDetected(match.first, match.second)
                             onSwaraSelected(match.first)
+                            onOctaveChanged(match.second)
                         }
                         recentlyPlayed["${match.first.name}_${match.second}"] = now
                     } else {
-                        detectedSwara = null
-                        detectedOctave = null
+                        updateDetected(null, null)
                     }
                 } else {
-                    detectedSwara = null
-                    detectedOctave = null
+                    updateDetected(null, null)
                 }
                 
                 // Clean up keys older than 10 seconds
@@ -173,8 +186,7 @@ fun RiyaazScreen(
             }
         }
     } else {
-        detectedSwara = null
-        detectedOctave = null
+        updateDetected(null, null)
         DisposableEffect(Unit) {
             onDispose {
                 recentlyPlayed.clear()
@@ -386,8 +398,15 @@ fun RiyaazScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val scaleLabel = if (selectedScale == null) {
+                                "Scale: -"
+                            } else if (effectiveScale != null && effectiveScale != selectedScale) {
+                                "Flute: $selectedScale ($effectiveScale)"
+                            } else {
+                                "Scale: $selectedScale"
+                            }
                             Text(
-                                text = "Scale: ${selectedScale ?: "-"}",
+                                text = scaleLabel,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (selectedScale != null) TextPrimary else TextSecondary
@@ -426,18 +445,20 @@ fun RiyaazScreen(
             when (activeSection) {
                 RiyaazSection.PLAIN_SCALE -> {
                     PlainScaleTable(
-                        selectedScale = selectedScale,
+                        selectedScale = activePlayScale,
                         selectedOctave = selectedOctave,
                         selectedTimer = selectedTimer,
                         playingSwara = playingSwara,
                         playingOctave = playingOctave,
-                        detectedSwara = detectedSwara,
-                        detectedOctave = detectedOctave,
+                        detectedSwara = currentDetectedSwara,
+                        detectedOctave = currentDetectedOctave,
                         practiceMode = practiceMode,
                         recentlyPlayed = recentlyPlayed,
                         fadeTrigger = fadeTrigger,
+                        onSwaraSelected = onSwaraSelected,
+                        onOctaveSelected = onOctaveChanged,
                         onPlaySwara = { swara, octave ->
-                            if (selectedScale != null && selectedTimer != null) {
+                            if (activePlayScale != null && selectedTimer != null) {
                                 playbackJob?.cancel()
                                 AudioEngine.stopReferenceNote()
                                 
@@ -446,7 +467,7 @@ fun RiyaazScreen(
                                 onPlayingOctaveChanged(octave)
                                 onOctaveChanged(octave) // Highlight the row and update visualizer on click!
                                 
-                                val midi = swara.getMidiNoteForScaleAndOctave(selectedScale, octave)
+                                val midi = swara.getMidiNoteForScaleAndOctave(activePlayScale, octave)
                                 AudioEngine.playReferenceNote(midi)
                                 
                                 playbackJob = coroutineScope.launch {
@@ -461,7 +482,7 @@ fun RiyaazScreen(
                 }
                 RiyaazSection.RAGA_LIBRARY -> {
                     RagaLibraryPractice(
-                        selectedScale = selectedScale,
+                        selectedScale = activePlayScale,
                         selectedOctave = selectedOctave,
                         onSwaraSelected = onSwaraSelected
                     )
@@ -483,6 +504,8 @@ fun PlainScaleTable(
     practiceMode: PracticeMode,
     recentlyPlayed: Map<String, Long>,
     fadeTrigger: Int,
+    onSwaraSelected: (Swara) -> Unit = {},
+    onOctaveSelected: (String) -> Unit = {},
     onPlaySwara: (Swara, String) -> Unit
 ) {
     val swaras = Swara.values().take(7)
@@ -621,6 +644,8 @@ fun PlainScaleTable(
                                 .background(cellBg)
                                 .then(if (cellBorder != null) Modifier.border(cellBorder, RoundedCornerShape(3.dp)) else Modifier)
                                 .clickable(enabled = isConfigured) {
+                                    onSwaraSelected(swara)
+                                    onOctaveSelected(oct.id)
                                     if (practiceMode != PracticeMode.LISTEN) {
                                         onPlaySwara(swara, oct.id)
                                     }

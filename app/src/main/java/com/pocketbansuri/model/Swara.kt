@@ -20,10 +20,86 @@ enum class Swara(
     HIGH_SA("Sa'", "सां", 523.25f, 72, listOf(0.5f, 0f, 0f, 0f, 0f, 0f, 0f));
 
     /**
-     * Gets the fingering list for a given octave.
+     * Gets the fingering list for a given Sa hole position (1 to 7) and octave.
      */
-    fun getFingeringForOctave(@Suppress("UNUSED_PARAMETER") octave: String): List<Float> {
-        return this.baseFingering
+    fun getFingeringForSaHole(saHole: Int): List<Float> {
+        return when (saHole) {
+            3 -> this.baseFingering // Standard: Sa=3, Re=2, Ga=1, Ma=0.5, Pa=6, Dha=5, Ni=4
+            4 -> when (this) {
+                // B scale on C flute: Sa=4, Re=3, Ga=2, Ma=1, Pa=7, Dha=6, Ni=5
+                SA -> listOf(1f, 1f, 1f, 1f, 0f, 0f, 0f)
+                RE -> listOf(1f, 1f, 1f, 0f, 0f, 0f, 0f)
+                GA -> listOf(1f, 1f, 0f, 0f, 0f, 0f, 0f)
+                MA -> listOf(1f, 0f, 0f, 0f, 0f, 0f, 0f)
+                PA -> listOf(1f, 1f, 1f, 1f, 1f, 1f, 1f)
+                DHA -> listOf(1f, 1f, 1f, 1f, 1f, 1f, 0f)
+                NI -> listOf(1f, 1f, 1f, 1f, 1f, 0f, 0f)
+                HIGH_SA -> listOf(1f, 1f, 1f, 0.5f, 0f, 0f, 0f)
+            }
+            5 -> when (this) {
+                // A scale on C flute: Sa=5, Re=4, Ga=3, Ma=2, Pa=1, Dha=7, Ni=6
+                SA -> listOf(1f, 1f, 1f, 1f, 1f, 0f, 0f)
+                RE -> listOf(1f, 1f, 1f, 1f, 0f, 0f, 0f)
+                GA -> listOf(1f, 1f, 1f, 0f, 0f, 0f, 0f)
+                MA -> listOf(1f, 1f, 0f, 0f, 0f, 0f, 0f)
+                PA -> listOf(1f, 0f, 0f, 0f, 0f, 0f, 0f)
+                DHA -> listOf(1f, 1f, 1f, 1f, 1f, 1f, 1f)
+                NI -> listOf(1f, 1f, 1f, 1f, 1f, 1f, 0f)
+                HIGH_SA -> listOf(1f, 1f, 1f, 1f, 0.5f, 0f, 0f)
+            }
+            6 -> when (this) {
+                // G scale on C flute: Sa=6, Re=5, Ga=4, Ma=3, Pa=2, Dha=1, Ni=0
+                SA -> listOf(1f, 1f, 1f, 1f, 1f, 1f, 0f)
+                RE -> listOf(1f, 1f, 1f, 1f, 1f, 0f, 0f)
+                GA -> listOf(1f, 1f, 1f, 1f, 0f, 0f, 0f)
+                MA -> listOf(1f, 1f, 1f, 0f, 0f, 0f, 0f)
+                PA -> listOf(1f, 1f, 0f, 0f, 0f, 0f, 0f)
+                DHA -> listOf(1f, 0f, 0f, 0f, 0f, 0f, 0f)
+                NI -> listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f)
+                HIGH_SA -> listOf(1f, 1f, 1f, 1f, 1f, 0.5f, 0f)
+            }
+            7 -> when (this) {
+                // F# scale on C flute: Sa=7, Re=6, Ga=5, Ma=4, Pa=3, Dha=2, Ni=1
+                SA -> listOf(1f, 1f, 1f, 1f, 1f, 1f, 1f)
+                RE -> listOf(1f, 1f, 1f, 1f, 1f, 1f, 0f)
+                GA -> listOf(1f, 1f, 1f, 1f, 1f, 0f, 0f)
+                MA -> listOf(1f, 1f, 1f, 1f, 0f, 0f, 0f)
+                PA -> listOf(1f, 1f, 1f, 0f, 0f, 0f, 0f)
+                DHA -> listOf(1f, 1f, 0f, 0f, 0f, 0f, 0f)
+                NI -> listOf(1f, 0f, 0f, 0f, 0f, 0f, 0f)
+                HIGH_SA -> listOf(1f, 1f, 1f, 1f, 1f, 1f, 0.5f)
+            }
+            2 -> when (this) {
+                // D scale on C flute: Sa=2, Re=1, Ga=0.5, Ma=0, Pa=5, Dha=4, Ni=3
+                SA -> listOf(1f, 1f, 0f, 0f, 0f, 0f, 0f)
+                RE -> listOf(1f, 0f, 0f, 0f, 0f, 0f, 0f)
+                GA -> listOf(0.5f, 0f, 0f, 0f, 0f, 0f, 0f)
+                MA -> listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f)
+                PA -> listOf(1f, 1f, 1f, 1f, 1f, 0f, 0f)
+                DHA -> listOf(1f, 1f, 1f, 1f, 0f, 0f, 0f)
+                NI -> listOf(1f, 1f, 1f, 0f, 0f, 0f, 0f)
+                HIGH_SA -> listOf(1f, 0.5f, 0f, 0f, 0f, 0f, 0f)
+            }
+            1 -> when (this) {
+                // E scale on C flute: Sa=1, Re=0.5, Ga=0, Ma=6, Pa=4, Dha=3, Ni=2
+                SA -> listOf(1f, 0f, 0f, 0f, 0f, 0f, 0f)
+                RE -> listOf(0.5f, 0f, 0f, 0f, 0f, 0f, 0f)
+                GA -> listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f)
+                MA -> listOf(1f, 1f, 1f, 1f, 1f, 1f, 0f)
+                PA -> listOf(1f, 1f, 1f, 1f, 0f, 0f, 0f)
+                DHA -> listOf(1f, 1f, 1f, 0f, 0f, 0f, 0f)
+                NI -> listOf(1f, 1f, 0f, 0f, 0f, 0f, 0f)
+                HIGH_SA -> listOf(0.5f, 0f, 0f, 0f, 0f, 0f, 0f)
+            }
+            else -> this.baseFingering
+        }
+    }
+
+    /**
+     * Gets the fingering list for a given octave and Sa hole position.
+     */
+    fun getFingeringForOctave(@Suppress("UNUSED_PARAMETER") octave: String, saHole: Int = 3): List<Float> {
+        return this.getFingeringForSaHole(saHole)
     }
 
     /**
@@ -122,5 +198,54 @@ enum class Swara(
             }
             return Pair(closestSwara, closestOctave)
         }
+    }
+}
+
+object FluteScaleHelper {
+    val CHROMATIC_SCALES = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+
+    /**
+     * Semitone offsets from the flute's nominal scale (where Hole 3 = 0):
+     * Hole 1: +4 semitones (Ga of flute, e.g. E on C flute)
+     * Hole 2: +2 semitones (Re of flute, e.g. D on C flute)
+     * Hole 3: 0 semitones (Sa of flute - default, e.g. C on C flute)
+     * Hole 4: -1 semitone (Ni of flute, e.g. B on C flute)
+     * Hole 5: -3 semitones (Dha of flute, e.g. A on C flute)
+     * Hole 6: -5 semitones (Pa of flute, e.g. G on C flute)
+     * Hole 7: -6 semitones (Tivra Ma of flute, e.g. F# on C flute)
+     */
+    fun getSemitoneOffsetForHole(hole: Int): Int {
+        return when (hole) {
+            1 -> 4
+            2 -> 2
+            3 -> 0
+            4 -> -1
+            5 -> -3
+            6 -> -5
+            7 -> -6
+            else -> 0
+        }
+    }
+
+    /**
+     * Calculates the scale produced when Hole [hole] is used to define Sa on a flute of [fluteScale].
+     */
+    fun getScaleForHole(fluteScale: String, hole: Int): String {
+        val rootIdx = CHROMATIC_SCALES.indexOf(fluteScale.uppercase()).let { if (it == -1) 0 else it }
+        val offset = getSemitoneOffsetForHole(hole)
+        val noteIdx = (rootIdx + offset).mod(12)
+        return CHROMATIC_SCALES[noteIdx]
+    }
+
+    /**
+     * Finds which hole on a flute of [fluteScale] gives [targetScale], or defaults to 3.
+     */
+    fun getHoleForScale(fluteScale: String, targetScale: String): Int {
+        for (h in 1..7) {
+            if (getScaleForHole(fluteScale, h).equals(targetScale, ignoreCase = true)) {
+                return h
+            }
+        }
+        return 3
     }
 }

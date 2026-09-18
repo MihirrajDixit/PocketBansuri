@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextAlign
 import com.pocketbansuri.AudioEngine
+import com.pocketbansuri.model.FluteScaleHelper
 import com.pocketbansuri.model.Raga
 import com.pocketbansuri.model.Swara
 import com.pocketbansuri.ui.components.BansuriVisualizer
@@ -34,12 +35,20 @@ fun MainScreen(modifier: Modifier = Modifier) {
     
     // Config states initialized to null so user is forced to select them before playing sound
     var selectedScale by remember { mutableStateOf<String?>(null) }
+    var saHole by remember { mutableStateOf(3) } // 1 to 7 hole defining Sa (default 3)
     var selectedOctave by remember { mutableStateOf<String?>(null) }
     var selectedTimer by remember { mutableStateOf<Int?>(null) }
+
+    val fluteScale = selectedScale ?: "C"
+    val effectiveScale = if (selectedScale != null) FluteScaleHelper.getScaleForHole(selectedScale!!, saHole) else null
 
     // Lifted playback state to synchronize highlighting between table and visualizer
     var playingSwara by remember { mutableStateOf<Swara?>(null) }
     var playingOctave by remember { mutableStateOf<String?>(null) }
+
+    // Lifted mic pitch detection state to synchronize visualizer highlighting in Practice mode
+    var detectedSwara by remember { mutableStateOf<Swara?>(null) }
+    var detectedOctave by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -119,17 +128,26 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 .background(DeepBackground),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // ================= SECTION A (15%): Flute Visualizer =================
+            // ================= SECTION A (18%): Flute Visualizer =================
             Box(
                 modifier = Modifier
-                    .weight(0.15f)
+                    .weight(0.18f)
                     .fillMaxHeight(),
                 contentAlignment = Alignment.Center
             ) {
                 BansuriVisualizer(
-                    activeSwara = playingSwara ?: selectedSwara,
-                    selectedOctave = playingOctave ?: selectedOctave ?: "Mid",
-                    isPlaying = playingSwara != null, // Highlight holes when note is active
+                    activeSwara = playingSwara ?: detectedSwara ?: selectedSwara,
+                    selectedOctave = playingOctave ?: detectedOctave ?: selectedOctave ?: "Mid",
+                    isPlaying = playingSwara != null, // Highlight holes when audio note is playing
+                    isDetected = detectedSwara != null, // Highlight holes when mic detects note in practice mode
+                    fluteScale = fluteScale,
+                    saHole = saHole,
+                    onSaHoleChanged = { newHole ->
+                        saHole = newHole
+                        if (selectedScale == null) {
+                            selectedScale = "C"
+                        }
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -142,10 +160,10 @@ fun MainScreen(modifier: Modifier = Modifier) {
                     .background(CardBorder)
             )
 
-            // ================= SECTION C (85%): Practice Station Area =================
+            // ================= SECTION C (82%): Practice Station Area =================
             Box(
                 modifier = Modifier
-                    .weight(0.85f)
+                    .weight(0.82f)
                     .fillMaxHeight()
             ) {
                 when (activeTab) {
@@ -156,21 +174,32 @@ fun MainScreen(modifier: Modifier = Modifier) {
                             onSwaraSelected = { selectedSwara = it },
                             activeSwara = selectedSwara,
                             selectedScale = selectedScale,
+                            effectiveScale = effectiveScale,
                             selectedOctave = selectedOctave,
                             selectedTimer = selectedTimer,
                             playingSwara = playingSwara,
                             onPlayingSwaraChanged = { playingSwara = it },
                             playingOctave = playingOctave,
                             onPlayingOctaveChanged = { playingOctave = it },
-                            onScaleChanged = { selectedScale = it },
+                            detectedSwara = detectedSwara,
+                            onDetectedSwaraChanged = { detectedSwara = it },
+                            detectedOctave = detectedOctave,
+                            onDetectedOctaveChanged = { detectedOctave = it },
+                            onScaleChanged = {
+                                selectedScale = it
+                                saHole = 3
+                            },
                             onTimerChanged = { selectedTimer = it },
                             onOctaveChanged = { selectedOctave = it }
                         )
                     }
                     AppTab.TUNER -> {
                         TunerScreen(
-                            selectedScale = selectedScale ?: "C",
-                            onScaleChanged = { selectedScale = it }
+                            selectedScale = effectiveScale ?: selectedScale ?: "C",
+                            onScaleChanged = {
+                                selectedScale = it
+                                saHole = 3
+                            }
                         )
                     }
                 }

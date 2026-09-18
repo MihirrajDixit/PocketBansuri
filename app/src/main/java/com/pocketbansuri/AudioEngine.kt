@@ -36,6 +36,8 @@ object AudioEngine {
     private var recordingThread: Thread? = null
     @Volatile private var isRecording = false
     @Volatile private var detectedFrequency = 0.0f
+    @Volatile private var detectedAirRatio = 0.0f
+    @Volatile private var detectedDoubleRatio = 0.0f
 
     /**
      * Starts the audio capture and pitch detection engine (Kotlin-based microphone thread).
@@ -44,30 +46,53 @@ object AudioEngine {
         if (isRecording) return
         isRecording = true
         recordingThread = Thread {
-            val sampleRate = 22050
             val channelConfig = AudioFormat.CHANNEL_IN_MONO
             val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-            val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
             
-            // Use 2048 samples (approx 93ms) buffer size for clean low-pitch detection
-            val bufferSizeInSamples = maxOf(2048, minBufferSize / 2)
-            
-            val audioRecord = try {
-                AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    sampleRate,
-                    channelConfig,
-                    audioFormat,
-                    bufferSizeInSamples * 2
-                )
-            } catch (e: SecurityException) {
-                Log.e(TAG, "Microphone permission not granted", e)
-                isRecording = false
-                return@Thread
+            val sampleRates = listOf(44100, 22050)
+            val audioSources = mutableListOf<Int>()
+            if (android.os.Build.VERSION.SDK_INT >= 24) {
+                audioSources.add(MediaRecorder.AudioSource.UNPROCESSED)
+            }
+            audioSources.add(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+            audioSources.add(MediaRecorder.AudioSource.MIC)
+
+            var audioRecord: AudioRecord? = null
+            var chosenSampleRate = 22050
+            var chosenBufferSize = 2048
+
+            outer@ for (rate in sampleRates) {
+                val minBufferSize = AudioRecord.getMinBufferSize(rate, channelConfig, audioFormat)
+                if (minBufferSize == AudioRecord.ERROR || minBufferSize == AudioRecord.ERROR_BAD_VALUE) continue
+                
+                val bufferSizeInSamples = maxOf(2048, minBufferSize / 2)
+                
+                for (source in audioSources) {
+                    try {
+                        val record = AudioRecord(
+                            source,
+                            rate,
+                            channelConfig,
+                            audioFormat,
+                            bufferSizeInSamples * 2
+                        )
+                        if (record.state == AudioRecord.STATE_INITIALIZED) {
+                            audioRecord = record
+                            chosenSampleRate = rate
+                            chosenBufferSize = bufferSizeInSamples
+                            Log.d(TAG, "Successfully initialized AudioRecord with source $source at $rate Hz")
+                            break@outer
+                        } else {
+                            record.release()
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to initialize AudioRecord with source $source at $rate Hz", e)
+                    }
+                }
             }
 
-            if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "AudioRecord initialization failed")
+            if (audioRecord == null || audioRecord.state != AudioRecord.STATE_INITIALIZED) {
+                Log.e(TAG, "AudioRecord initialization failed across all combinations")
                 isRecording = false
                 return@Thread
             }
@@ -81,11 +106,11 @@ object AudioEngine {
                 return@Thread
             }
 
-            val audioBuffer = ShortArray(bufferSizeInSamples)
+            val audioBuffer = ShortArray(chosenBufferSize)
             while (isRecording) {
-                val readResult = audioRecord.read(audioBuffer, 0, bufferSizeInSamples)
+                val readResult = audioRecord.read(audioBuffer, 0, chosenBufferSize)
                 if (readResult > 0) {
-                    val freq = detectPitchAutocorrelation(audioBuffer, readResult, sampleRate)
+                    val freq = detectPitchAutocorrelation(audioBuffer, readResult, chosenSampleRate)
                     detectedFrequency = freq
                 }
             }
@@ -114,6 +139,8 @@ object AudioEngine {
         }
         recordingThread = null
         detectedFrequency = 0.0f
+        detectedAirRatio = 0.0f
+        detectedDoubleRatio = 0.0f
     }
 
     /**
@@ -130,6 +157,27 @@ object AudioEngine {
         return detectedFrequency
     }
 
+    /**
+     * Returns the raw microphone detected pitch frequency, bypassing the synthesizer target note override.
+     */
+    fun getRawDetectedFrequency(): Float {
+        return detectedFrequency
+    }
+
+    /**
+     * Returns the detected ratio of air/breathiness in the sound (0.0 to 1.0).
+     */
+    fun getAirRatio(): Float {
+        return detectedAirRatio
+    }
+
+    /**
+     * Returns the detected ratio of double sound/multiphonic instability in the sound (0.0 to 1.0).
+     */
+    fun getDoubleRatio(): Float {
+        return detectedDoubleRatio
+    }
+
     private fun detectPitchAutocorrelation(audioBuffer: ShortArray, size: Int, sampleRate: Int): Float {
         var sumSquares = 0.0
         for (i in 0 until size) {
@@ -137,6 +185,8 @@ object AudioEngine {
         }
         val rms = Math.sqrt(sumSquares / size)
         if (rms < 150.0) { // Silence threshold
+            detectedAirRatio = 0.0f
+            detectedDoubleRatio = 0.0f
             return 0.0f
         }
 
@@ -185,6 +235,8 @@ object AudioEngine {
         }
         
         if (globalMaxR == 0.0f) {
+            detectedAirRatio = 1.0f
+            detectedDoubleRatio = 0.0f
             return 0.0f
         }
         
@@ -208,6 +260,31 @@ object AudioEngine {
                 }
             }
         }
+
+        // Calculate periodicity quality metrics (Air / Double sound detection)
+        var zeroLagEnergy = 0.0f
+        for (i in 0 until size) {
+            zeroLagEnergy += clipped[i] * clipped[i]
+        }
+
+        val bestLagVal = if (bestLag in 0..maxLag) r[bestLag] else 0f
+        val periodicity = if (zeroLagEnergy > 0f) (bestLagVal / zeroLagEnergy).coerceIn(0f, 1f) else 0f
+        
+        // Air ratio: higher value indicates more breath/wind noise relative to harmonic structure
+        detectedAirRatio = (1.0f - periodicity).coerceIn(0f, 1f)
+
+        // Find the second highest peak that is not too close to the main peak
+        var secondBestPeakVal = 0.0f
+        for (lag in (minLag + 1) until maxLag) {
+            if (r[lag] > r[lag - 1] && r[lag] > r[lag + 1]) {
+                if (abs(lag - bestLag) > bestLag * 0.15) {
+                    if (r[lag] > secondBestPeakVal) {
+                        secondBestPeakVal = r[lag]
+                    }
+                }
+            }
+        }
+        detectedDoubleRatio = if (bestLagVal > 0f) (secondBestPeakVal / bestLagVal).coerceIn(0f, 1f) else 0f
 
         // Parabolic peak interpolation
         if (bestLag in (minLag + 1) until maxLag) {

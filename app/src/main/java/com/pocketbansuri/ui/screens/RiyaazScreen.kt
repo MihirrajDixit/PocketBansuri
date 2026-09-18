@@ -33,6 +33,45 @@ enum class RiyaazSection {
     RAGA_LIBRARY
 }
 
+enum class PracticeMode(val displayName: String) {
+    PLAY("Play"),
+    LISTEN("Practice"),
+    BOTH("Both")
+}
+
+fun findClosestCell(
+    detectedFreq: Float,
+    selectedScale: String,
+    swaras: List<Swara>,
+    octaveIds: List<String>
+): Pair<Swara, String>? {
+    if (detectedFreq <= 0f) return null
+    var closestSwara: Swara? = null
+    var closestOctave: String? = null
+    var minDiff = Double.MAX_VALUE
+    
+    octaveIds.forEach { oct ->
+        swaras.forEach { swara ->
+            val cellFreq = swara.getFrequencyForScaleAndOctave(selectedScale, oct)
+            if (cellFreq != null) {
+                val diff = kotlin.math.abs(detectedFreq.toDouble() - cellFreq)
+                if (diff < minDiff) {
+                    minDiff = diff
+                    closestSwara = swara
+                    closestOctave = oct
+                }
+            }
+        }
+    }
+    
+    val closestFreq = closestSwara?.getFrequencyForScaleAndOctave(selectedScale, closestOctave!!) ?: return null
+    val ratio = detectedFreq / closestFreq
+    if (ratio in 0.91..1.09) {
+        return Pair(closestSwara!!, closestOctave!!)
+    }
+    return null
+}
+
 @Composable
 fun RiyaazScreen(
     selectedRaga: Raga,
@@ -52,12 +91,18 @@ fun RiyaazScreen(
     modifier: Modifier = Modifier
 ) {
     var activeSection by remember { mutableStateOf(RiyaazSection.PLAIN_SCALE) }
+    var practiceMode by remember { mutableStateOf(PracticeMode.PLAY) }
+    
+    var detectedSwara by remember { mutableStateOf<Swara?>(null) }
+    var detectedOctave by remember { mutableStateOf<String?>(null) }
+    
+    val recentlyPlayed = remember { mutableStateMapOf<String, Long>() }
+    var fadeTrigger by remember { mutableStateOf(0) }
     
     // Manage coroutine job for timer-based playback
     val coroutineScope = rememberCoroutineScope()
     var playbackJob by remember { mutableStateOf<Job?>(null) }
 
-    val isConfigured = selectedScale != null && selectedTimer != null
     val view = LocalView.current
 
     // Globally mute Android platform touch feedback / click sounds while Riyaaz screen is active
@@ -72,10 +117,68 @@ fun RiyaazScreen(
         onDispose {
             playbackJob?.cancel()
             AudioEngine.stopReferenceNote()
+            AudioEngine.stopEngine()
             onPlayingSwaraChanged(null)
             onPlayingOctaveChanged(null)
             view.isSoundEffectsEnabled = originalSoundEffects
             root.isSoundEffectsEnabled = originalRootSoundEffects
+        }
+    }
+
+    // Microphone audio engine recording thread control based on section/mode
+    LaunchedEffect(activeSection, practiceMode) {
+        if (activeSection == RiyaazSection.PLAIN_SCALE && (practiceMode == PracticeMode.LISTEN || practiceMode == PracticeMode.BOTH)) {
+            AudioEngine.startEngine()
+        } else {
+            AudioEngine.stopEngine()
+            detectedSwara = null
+            detectedOctave = null
+            recentlyPlayed.clear()
+        }
+    }
+
+    // Real-time microphone audio polling & mapping loop
+    if (activeSection == RiyaazSection.PLAIN_SCALE && (practiceMode == PracticeMode.LISTEN || practiceMode == PracticeMode.BOTH)) {
+        LaunchedEffect(selectedScale) {
+            val scale = selectedScale ?: "C"
+            val swaras = Swara.values().take(7)
+            val octaveIds = listOf("Low", "Mid", "High", "V.High")
+            while (true) {
+                val freq = AudioEngine.getRawDetectedFrequency()
+                val now = System.currentTimeMillis()
+                if (freq > 0f) {
+                    val match = findClosestCell(freq, scale, swaras, octaveIds)
+                    if (match != null) {
+                        if (detectedSwara != match.first || detectedOctave != match.second) {
+                            detectedSwara = match.first
+                            detectedOctave = match.second
+                            onSwaraSelected(match.first)
+                        }
+                        recentlyPlayed["${match.first.name}_${match.second}"] = now
+                    } else {
+                        detectedSwara = null
+                        detectedOctave = null
+                    }
+                } else {
+                    detectedSwara = null
+                    detectedOctave = null
+                }
+                
+                // Clean up keys older than 10 seconds
+                val keysToRemove = recentlyPlayed.filter { now - it.value >= 10000L }.keys
+                keysToRemove.forEach { recentlyPlayed.remove(it) }
+                
+                fadeTrigger++
+                delay(100L)
+            }
+        }
+    } else {
+        detectedSwara = null
+        detectedOctave = null
+        DisposableEffect(Unit) {
+            onDispose {
+                recentlyPlayed.clear()
+            }
         }
     }
 
@@ -134,51 +237,6 @@ fun RiyaazScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Timer Dropdown (only visible in Plain Scale practice)
-                if (activeSection == RiyaazSection.PLAIN_SCALE) {
-                    var timerExpanded by remember { mutableStateOf(false) }
-                    Box {
-                        Box(
-                            modifier = Modifier
-                                .height(26.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(SurfaceDark)
-                                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
-                                .clickable { timerExpanded = true }
-                                .padding(horizontal = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Timer: ${selectedTimer?.let { "${it}s" } ?: "-"}",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (selectedTimer != null) TextPrimary else TextSecondary
-                                )
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text("▾", fontSize = 8.sp, color = ForestLight)
-                            }
-                        }
-                        DropdownMenu(
-                            expanded = timerExpanded,
-                            onDismissRequest = { timerExpanded = false },
-                            modifier = Modifier
-                                .background(SurfaceDark)
-                                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
-                        ) {
-                            listOf(1, 5, 10, 15, 30, 60, 120).forEach { timer ->
-                                DropdownMenuItem(
-                                    text = { Text("${timer}s", color = TextPrimary, fontSize = 11.sp) },
-                                    onClick = {
-                                        onTimerChanged(timer)
-                                        timerExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
                 // Octave Dropdown (only visible in Raga Practice)
                 if (activeSection == RiyaazSection.RAGA_LIBRARY) {
                     var octaveExpanded by remember { mutableStateOf(false) }
@@ -217,6 +275,96 @@ fun RiyaazScreen(
                                     onClick = {
                                         onOctaveChanged(octave)
                                         octaveExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Mode Dropdown (only visible in Plain Scale, on the left of Timer)
+                if (activeSection == RiyaazSection.PLAIN_SCALE) {
+                    var modeExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .height(26.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(SurfaceDark)
+                                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                                .clickable { modeExpanded = true }
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Mode: ${practiceMode.displayName}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("▾", fontSize = 8.sp, color = ForestLight)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = modeExpanded,
+                            onDismissRequest = { modeExpanded = false },
+                            modifier = Modifier
+                                .background(SurfaceDark)
+                                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                        ) {
+                            PracticeMode.values().forEach { mode ->
+                                DropdownMenuItem(
+                                    text = { Text(mode.displayName, color = TextPrimary, fontSize = 11.sp) },
+                                    onClick = {
+                                        practiceMode = mode
+                                        modeExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Timer Dropdown (only visible in Plain Scale practice)
+                if (activeSection == RiyaazSection.PLAIN_SCALE) {
+                    var timerExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .height(26.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(SurfaceDark)
+                                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                                .clickable { timerExpanded = true }
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Timer: ${selectedTimer?.let { "${it}s" } ?: "-"}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selectedTimer != null) TextPrimary else TextSecondary
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("▾", fontSize = 8.sp, color = ForestLight)
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = timerExpanded,
+                            onDismissRequest = { timerExpanded = false },
+                            modifier = Modifier
+                                .background(SurfaceDark)
+                                .border(1.dp, CardBorder, RoundedCornerShape(4.dp))
+                        ) {
+                            listOf(1, 5, 10, 15, 30, 60, 120).forEach { timer ->
+                                DropdownMenuItem(
+                                    text = { Text("${timer}s", color = TextPrimary, fontSize = 11.sp) },
+                                    onClick = {
+                                        onTimerChanged(timer)
+                                        timerExpanded = false
                                     }
                                 )
                             }
@@ -283,6 +431,11 @@ fun RiyaazScreen(
                         selectedTimer = selectedTimer,
                         playingSwara = playingSwara,
                         playingOctave = playingOctave,
+                        detectedSwara = detectedSwara,
+                        detectedOctave = detectedOctave,
+                        practiceMode = practiceMode,
+                        recentlyPlayed = recentlyPlayed,
+                        fadeTrigger = fadeTrigger,
                         onPlaySwara = { swara, octave ->
                             if (selectedScale != null && selectedTimer != null) {
                                 playbackJob?.cancel()
@@ -325,10 +478,15 @@ fun PlainScaleTable(
     selectedTimer: Int?,
     playingSwara: Swara?,
     playingOctave: String?,
+    detectedSwara: Swara?,
+    detectedOctave: String?,
+    practiceMode: PracticeMode,
+    recentlyPlayed: Map<String, Long>,
+    fadeTrigger: Int,
     onPlaySwara: (Swara, String) -> Unit
 ) {
     val swaras = Swara.values().take(7)
-    val isConfigured = selectedScale != null && selectedTimer != null
+    val isConfigured = selectedScale != null && (practiceMode == PracticeMode.LISTEN || selectedTimer != null)
 
     val octaves = listOf(
         OctaveConfig("Low", "Low (Mandra)"),
@@ -421,7 +579,18 @@ fun PlainScaleTable(
                     // 7 Swara buttons
                     swaras.forEach { swara ->
                         val isPlayingThis = playingSwara == swara && playingOctave?.uppercase() == oct.id.uppercase()
+                        val isDetectedThis = (practiceMode == PracticeMode.LISTEN || practiceMode == PracticeMode.BOTH) &&
+                                detectedSwara == swara && detectedOctave?.uppercase() == oct.id.uppercase()
+
+                        // Fading trace calculation
+                        val now = System.currentTimeMillis()
+                        val lastPlayedTime = recentlyPlayed["${swara.name}_${oct.id}"]
+                        val elapsed = if (lastPlayedTime != null) now - lastPlayedTime else Long.MAX_VALUE
+                        val isRecent = (practiceMode == PracticeMode.LISTEN || practiceMode == PracticeMode.BOTH) &&
+                                elapsed < 10000L && !isDetectedThis && !isPlayingThis
                         
+                        val fadePercent = if (isRecent) 1f - (elapsed.toFloat() / 10000f) else 0f
+
                         val westernPitch = if (selectedScale != null) {
                             swara.getWesternEquivalent(selectedScale, oct.id)
                         } else {
@@ -429,8 +598,19 @@ fun PlainScaleTable(
                         }
 
                         val cellBg = when {
-                            isPlayingThis -> ForestLight.copy(alpha = 0.25f)
+                            isPlayingThis && isDetectedThis -> AccentGreen.copy(alpha = 0.35f)
+                            isDetectedThis -> PitchSharp.copy(alpha = 0.25f)
+                            isPlayingThis -> CardBorder
+                            isRecent -> BambooGold.copy(alpha = 0.15f * fadePercent)
                             else -> Color.Transparent
+                        }
+
+                        val cellBorder = when {
+                            isPlayingThis && isDetectedThis -> BorderStroke(2.dp, AccentGreen)
+                            isDetectedThis -> BorderStroke(1.5.dp, PitchSharp)
+                            isPlayingThis -> BorderStroke(1.dp, ForestLight)
+                            isRecent -> BorderStroke(1.dp, BambooGold.copy(alpha = 0.4f * fadePercent))
+                            else -> BorderStroke(0.5.dp, CardBorder.copy(alpha = 0.5f))
                         }
 
                         Box(
@@ -439,16 +619,25 @@ fun PlainScaleTable(
                                 .padding(1.dp)
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(cellBg)
-                                .border(0.5.dp, CardBorder.copy(alpha = 0.5f), RoundedCornerShape(3.dp))
+                                .then(if (cellBorder != null) Modifier.border(cellBorder, RoundedCornerShape(3.dp)) else Modifier)
                                 .clickable(enabled = isConfigured) {
-                                    onPlaySwara(swara, oct.id)
+                                    if (practiceMode != PracticeMode.LISTEN) {
+                                        onPlaySwara(swara, oct.id)
+                                    }
                                 }
                                 .padding(vertical = 2.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = westernPitch.ifEmpty { "-" },
-                                color = if (isPlayingThis) ForestLight else (if (isConfigured) TextPrimary else TextSecondary.copy(alpha = 0.4f)),
+                                color = when {
+                                    isPlayingThis && isDetectedThis -> AccentGreen
+                                    isPlayingThis -> ForestLight
+                                    isDetectedThis -> PitchSharp
+                                    isRecent -> BambooGold.copy(alpha = 0.4f + 0.6f * fadePercent)
+                                    isConfigured -> TextPrimary
+                                    else -> TextSecondary.copy(alpha = 0.4f)
+                                },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center

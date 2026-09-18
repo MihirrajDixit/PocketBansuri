@@ -118,6 +118,8 @@ fun TunerScreen(
     modifier: Modifier = Modifier
 ) {
     var detectedFrequency by remember { mutableStateOf(0.0f) }
+    var airRatio by remember { mutableStateOf(0.0f) }
+    var doubleRatio by remember { mutableStateOf(0.0f) }
     
     // Start and stop the native audio engine
     DisposableEffect(Unit) {
@@ -127,10 +129,12 @@ fun TunerScreen(
         }
     }
 
-    // Poll the engine for the live detected frequency
+    // Poll the engine for the live detected frequency and tone quality metrics
     LaunchedEffect(Unit) {
         while (true) {
             detectedFrequency = AudioEngine.getDetectedFrequency()
+            airRatio = AudioEngine.getAirRatio()
+            doubleRatio = AudioEngine.getDoubleRatio()
             delay(50) // Poll every 50ms (20fps, very smooth)
         }
     }
@@ -177,6 +181,37 @@ fun TunerScreen(
             if (freqDiff < -inTuneThreshold) "Flat (Too Low)" else "Sharp (Too High)"
         else -> 
             "Playing false note: ${closestChromaticNote.sargamName} instead of shuddh ${targetSwara.displayName}"
+    }
+
+    // Tone diagnostics logic
+    val currentAirRatio = if (isSilence) 0f else airRatio
+    val currentDoubleRatio = if (isSilence) 0f else doubleRatio
+
+    val toneDiagnosis: String
+    val toneSuggestion: String
+    val toneDiagnosisColor: Color
+
+    when {
+        isSilence -> {
+            toneDiagnosis = "No Signal"
+            toneSuggestion = "Play a note to see real-time breath and embouchure quality diagnostics."
+            toneDiagnosisColor = TextSecondary
+        }
+        currentAirRatio > 0.23f -> {
+            toneDiagnosis = "Airy / Breathy Tone"
+            toneSuggestion = "Lip aperture too wide. Tighten lip corners, make the opening smaller, and make sure 70% of the air goes *across* the embouchure edge."
+            toneDiagnosisColor = PitchFlat
+        }
+        currentDoubleRatio > 0.70f -> {
+            toneDiagnosis = "Split Tone / Double Sound"
+            toneSuggestion = "Blowing pressure is unstable or flute angle is incorrect. Maintain firm abdominal air support and adjust flute roll slightly."
+            toneDiagnosisColor = PitchSharp
+        }
+        else -> {
+            toneDiagnosis = "Clear & Pure Resonance"
+            toneSuggestion = "Excellent control! You have established a clean harmonic tone. Maintain this embouchure alignment."
+            toneDiagnosisColor = AccentGreen
+        }
     }
 
     Column(
@@ -354,7 +389,7 @@ fun TunerScreen(
                     fontWeight = FontWeight.Medium
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Linear Tuning Meter/Gauge (shows deviation from Wish to Play target frequency)
                 TuningMeter(
@@ -364,7 +399,7 @@ fun TunerScreen(
                     isSilence = isSilence
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = statusText,
@@ -372,6 +407,92 @@ fun TunerScreen(
                     color = tuningColor,
                     fontWeight = FontWeight.SemiBold
                 )
+
+                // Divider
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = CardBorder, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Tone Quality Panel
+                Text(
+                    text = "Tone Quality & Diagnostics",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = BambooGold,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Ratios meters row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Air Noise Meter
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Air Noise", fontSize = 10.sp, color = TextSecondary)
+                            Text(String.format("%.0f%%", currentAirRatio * 100), fontSize = 10.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { currentAirRatio },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = if (currentAirRatio > 0.23f) PitchFlat else ForestLight,
+                            trackColor = CardBorder
+                        )
+                    }
+
+                    // Tone Split Meter
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Tone Split", fontSize = 10.sp, color = TextSecondary)
+                            Text(String.format("%.0f%%", currentDoubleRatio * 100), fontSize = 10.sp, color = TextPrimary, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { currentDoubleRatio },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            color = if (currentDoubleRatio > 0.70f) PitchSharp else ForestLight,
+                            trackColor = CardBorder
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Suggestion Box
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(DeepBackground)
+                        .border(1.dp, CardBorder, RoundedCornerShape(6.dp))
+                        .padding(10.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Diagnosis: $toneDiagnosis",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = toneDiagnosisColor
+                        )
+                        Text(
+                            text = toneSuggestion,
+                            fontSize = 10.sp,
+                            color = TextPrimary,
+                            lineHeight = 13.sp
+                        )
+                    }
+                }
             }
         }
     }

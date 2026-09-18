@@ -20,8 +20,15 @@
         *   **False Note Feedback**: If your pitch drifts, the tuner visually displays exactly what "false note" you are hitting (e.g., playing a flat `Re` and hitting `re` Komal Re), making it a powerful tool for intonation correction.
     *   **Multi-Octave Alignment**: Automatically detects the played octave (`LOW`, `MID`, `HIGH`, `V.HIGH`) and aligns the target note's octave dynamically to match the played octave, preventing the deviation gauge from pegging to the margins when jumping octaves.
     *   **Visual Precision Gauge**: Displays the live frequency in Hz along with a responsive visual tuner bar showing precise deviation ($\pm20$ Hz) and status feedback (perfect match, flat, sharp, or false-note indicators).
+    *   **Tone Quality & Diagnostics Panel**: Analyzes the raw periodic stability of the microphone signal to detect embouchure or breath control issues:
+        *   **Air Noise Detection**: Compares the fundamental periodicity peak to overall signal energy to identify excessive breath hiss/wind noise (low HNR), suggesting lip opening and blow angle corrections.
+        *   **Tone Split / Double Sound Detection**: Identifies competing subharmonics and octave register clashes, diagnosing pitch instability or multiphonics and suggesting breath support changes.
+        *   **Dynamic Pedagogical Advice**: Real-time diagnostic box providing immediate, actionable advice on how to improve lip shape (aperture), roll angle, and diaphragm support.
 *   **Riyaaz Tab**:
-    *   **Plain Scale Table**: Configures the key scale, base practice octave, and a custom timer value to step through notes individually.
+    *   **Plain Scale Table**: Configures the key scale, custom timer, and three distinct practice modes:
+        *   **Play Mode**: Tapping notes in the table plays synthesized reference tones (microphone tuner remains off to conserve resources).
+        *   **Practice Mode**: Runs real-time microphone pitch detection. Playing a note on your flute automatically highlights/glows the corresponding cell in the table and updates the fingering visualizer. Tapping notes does not play synthesized sounds. Keeps a **10-second fading history trace** of recently played notes (colored in warm bamboo gold) to visually track scale transitions.
+        *   **Both Mode (Duplex Practice)**: Runs both the microphone tuner and the synthesizer playback simultaneously, allowing you to play along with the reference tone. To prevent the device's synthesized output from triggering the Acoustic Echo Canceller (AEC) or noise-suppression algorithms (which mute or cancel the microphone input), the audio engine starts the recorder using `UNPROCESSED` or `VOICE_RECOGNITION` sources at a matching `44100` Hz sample rate. This ensures both your flute tone and the synthesized note are processed concurrently without blocking. If the note you blow matches the note being synthesized, the cell highlights in a distinct **Accent Green** color (success match).
     *   **Minimal Raga Practice (Autoplay Raga Scales)**:
         *   **4-Row Layout**: Each Raga card is strictly constrained to 4 rows of text, using a large, clear font to prevent vertical overflow and maximize readability on landscape devices.
         *   **Core Details**: Displays the Raga name, parent Thaat category tag, and primary notes (Vadi & Samvadi).
